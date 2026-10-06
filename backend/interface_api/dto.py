@@ -1,11 +1,12 @@
-from typing import Any, Generic, Literal, TypeVar, Annotated
-from uuid import UUID
+from typing import Annotated, Any, Generic, Literal, TypeVar
 from urllib.parse import urlsplit
+from uuid import UUID
+
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class DTO(BaseModel):
-    model_config = ConfigDict(extra='forbid')
+    model_config = ConfigDict(extra="forbid")
 
 
 class DeploymentCreate(DTO):
@@ -16,13 +17,19 @@ class DeploymentCreate(DTO):
     ui_variant: str = Field(min_length=1)
     vendor_release: str | None = None
 
-    @field_validator('base_url')
+    @field_validator("base_url")
     @classmethod
     def valid_url(cls, value):
         url = urlsplit(value)
-        if url.scheme not in ('http','https') or not url.hostname or url.username or url.password or url.fragment:
-            raise ValueError('Expected an HTTP URL without credentials')
-        return value.rstrip('/')
+        if (
+            url.scheme not in ("http", "https")
+            or not url.hostname
+            or url.username
+            or url.password
+            or url.fragment
+        ):
+            raise ValueError("Expected an HTTP URL without credentials")
+        return value.rstrip("/")
 
 
 class DeploymentPatch(DTO):
@@ -32,16 +39,16 @@ class DeploymentPatch(DTO):
     ui_variant: str | None = Field(None, min_length=1)
     vendor_release: str | None = None
 
-    @field_validator('base_url')
+    @field_validator("base_url")
     @classmethod
     def valid_url(cls, value):
         return DeploymentCreate.valid_url(value) if value is not None else value
 
-    @model_validator(mode='after')
+    @model_validator(mode="after")
     def non_null_fields(self):
-        for key in ('base_url','environment','ui_variant'):
-            if key in self.model_fields_set and getattr(self,key) is None:
-                raise ValueError('Configuration field cannot be null')
+        for key in ("base_url", "environment", "ui_variant"):
+            if key in self.model_fields_set and getattr(self, key) is None:
+                raise ValueError("Configuration field cannot be null")
         return self
 
 
@@ -63,39 +70,55 @@ class CapabilityDTO(DTO):
 
 
 class DiscoveryStart(DTO):
-    kind: Literal['discovery']
+    kind: Literal["discovery"]
     app_deployment_id: UUID
     task: str = Field(min_length=1)
     inputs: dict[str, Any] = Field(default_factory=dict)
 
-    @field_validator('task')
+    @field_validator("task")
     @classmethod
-    def nonblank(cls,value):
+    def nonblank(cls, value):
         if not value.strip():
-            raise ValueError('Task cannot be blank')
+            raise ValueError("Task cannot be blank")
         return value
 
 
 class ReplayStart(DTO):
-    kind: Literal['replay']
+    kind: Literal["replay"]
     app_deployment_id: UUID
     artifact_id: UUID
     inputs: dict[str, Any]
 
-RunStart = Annotated[DiscoveryStart | ReplayStart, Field(discriminator='kind')]
-RunStatus = Literal['queued','running','awaiting_finalization','validating','cancelling','completed','failed','cancelled','interrupted']
+
+RunStart = Annotated[DiscoveryStart | ReplayStart, Field(discriminator="kind")]
+RunStatus = Literal[
+    "queued",
+    "running",
+    "awaiting_finalization",
+    "validating",
+    "cancelling",
+    "completed",
+    "failed",
+    "cancelled",
+    "interrupted",
+]
 
 
 class OutcomeDTO(DTO):
-    kind: Literal['success','expected_outcome','hard_failure']
+    kind: Literal["success", "expected_outcome", "hard_failure"]
     code: str
     message: str
     outputs: dict[str, Any] | None = None
-    failure_stage: Literal['input_validation','readiness','execution','finalization','storage'] | None = None
+    failure_stage: (
+        Literal["input_validation", "readiness", "execution", "finalization", "storage"]
+        | None
+    ) = None
     step_id: str | None = None
     expected: Any = None
     observed: Any = None
-    dispatch_state: Literal['not_dispatched','completed','uncertain'] = 'not_dispatched'
+    dispatch_state: Literal["not_dispatched", "completed", "uncertain"] = (
+        "not_dispatched"
+    )
 
 
 class ProgressDTO(DTO):
@@ -107,8 +130,8 @@ class ProgressDTO(DTO):
 
 class RunDTO(DTO):
     run_id: str
-    kind: Literal['discovery','replay']
-    purpose: Literal['user','validation']
+    kind: Literal["discovery", "replay"]
+    purpose: Literal["user", "validation"]
     app_deployment_id: str
     deployment_snapshot: dict[str, Any]
     capability_id: str | None
@@ -122,7 +145,7 @@ class RunDTO(DTO):
     binding_id: str | None
     binding_version: int | None
     binding_snapshot: dict[str, Any] | None
-    selection_source: Literal['discovery','binding','explicit_artifact','validation']
+    selection_source: Literal["discovery", "binding", "explicit_artifact", "validation"]
     status: RunStatus
     outcome: OutcomeDTO | None
     stop_reason: dict[str, Any] | None
@@ -149,7 +172,9 @@ class EventsDTO(DTO):
     run_status: RunStatus
 
 
-T = TypeVar('T')
+T = TypeVar("T")
+
+
 class Page(DTO, Generic[T]):
     items: list[T]
     total: int
@@ -179,7 +204,7 @@ class BindingDTO(DTO):
     capability_id: str
     artifact_id: str
     binding_version: int
-    state: Literal['ready','retired']
+    state: Literal["ready", "retired"]
     deployment_config_version: int
     validation_run_id: str
     selection_note: str | None
@@ -208,7 +233,7 @@ class EvidenceAssetDTO(DTO):
 class ArtifactAssetDTO(DTO):
     asset_id: str
     artifact_id: str
-    kind: Literal['reference_crop']
+    kind: Literal["reference_crop"]
     object_key: str
     mime_type: str
     sha256: str

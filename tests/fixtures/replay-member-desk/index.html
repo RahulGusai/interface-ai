@@ -1,4 +1,56 @@
-<!doctype html><html><head><meta charset="utf-8"><title>Synthetic Member Desk</title><style>body{font:18px system-ui;padding:32px}input,button,a{font:inherit;margin:12px;padding:8px}</style></head><body><h1>Synthetic Member Desk</h1><label>Member email<input type="email" id="email"></label><button id="search">Search</button><main id="results"></main><script>
-const members={'demo@example.test':'Active','other@example.test':'Pending'};
-search.onclick=()=>{results.replaceChildren();const value=email.value;if(!members[value]){const p=document.createElement('p');p.textContent='No member found';results.append(p);return;}const link=document.createElement('a');link.href='#member';link.textContent=value;link.onclick=e=>{e.preventDefault();results.replaceChildren();const heading=document.createElement('h2');heading.textContent='Member details';const status=document.createElement('span');status.setAttribute('aria-label','Status');status.textContent=members[value];results.append(heading,status);};results.append(link);};
-</script></body></html>
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Synthetic Member Desk</title>
+    <style>
+      body {
+        font: 18px system-ui;
+        padding: 32px;
+      }
+      input,
+      button,
+      a {
+        font: inherit;
+        margin: 12px;
+        padding: 8px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Synthetic Member Desk</h1>
+    <label>Member email<input type="email" id="email" /></label
+    ><button id="search">Search</button>
+    <main id="results"></main>
+    <script>
+      const members = {
+        "demo@example.test": "Active",
+        "other@example.test": "Pending",
+      };
+      search.onclick = () => {
+        results.replaceChildren();
+        const value = email.value;
+        if (!members[value]) {
+          const p = document.createElement("p");
+          p.textContent = "No member found";
+          results.append(p);
+          return;
+        }
+        const link = document.createElement("a");
+        link.href = "#member";
+        link.textContent = value;
+        link.onclick = (e) => {
+          e.preventDefault();
+          results.replaceChildren();
+          const heading = document.createElement("h2");
+          heading.textContent = "Member details";
+          const status = document.createElement("span");
+          status.setAttribute("aria-label", "Status");
+          status.textContent = members[value];
+          results.append(heading, status);
+        };
+        results.append(link);
+      };
+    </script>
+  </body>
+</html>

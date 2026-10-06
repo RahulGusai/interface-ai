@@ -1,2 +1,53 @@
-import{it,expect}from'vitest';import{PNG}from'pngjs';import{recordDurableTarget}from'../../src/runtime/target-recorder.js';import type{Capture}from'../../src/contracts/observation.js';
-it('uses correlated pre-action bytes and requires explicit crop bounds',()=>{const png=new PNG({width:1280,height:800});png.data.fill(30);const bytes=PNG.sync.write(png);const capture:Capture={observation:{status:'ok',observation_id:'fresh',captured_at:new Date().toISOString(),surface:{id:'browser',kind:'browser',title:'fixture'},screenshot:{status:'available',image_ref:'before',width:1280,height:800},controls:{status:'available',items:[]}},image:{ref:'before',mimeType:'image/png',bytes}};const target={kind:'point',x:60,y:70} as const;expect(()=>recordDurableTarget(target,capture)).toThrow('REFERENCE_BOUNDS_REQUIRED');const recorded=recordDurableTarget(target,capture,{visual_reference:{rect:{left:40,top:50,width:40,height:40},relative_point:{u:.5,v:.5},description:'synthetic control'}});const crop=PNG.sync.read(recorded.crop!);expect(crop.width).toBe(40);expect(crop.data[0]).toBe(30);expect(JSON.stringify(recorded.target)).not.toContain('observation_id');expect(()=>recordDurableTarget(target,{...capture,image:{...capture.image!,ref:'after'}},{visual_reference:{rect:{left:40,top:50,width:40,height:40},relative_point:{u:.5,v:.5},description:'control'}})).toThrow('REFERENCE_CAPTURE_REQUIRED');});
+import { it, expect } from "vitest";
+import { PNG } from "pngjs";
+import { recordDurableTarget } from "../../src/runtime/target-recorder.js";
+import type { Capture } from "../../src/contracts/observation.js";
+it("uses correlated pre-action bytes and requires explicit crop bounds", () => {
+  const png = new PNG({ width: 1280, height: 800 });
+  png.data.fill(30);
+  const bytes = PNG.sync.write(png);
+  const capture: Capture = {
+    observation: {
+      status: "ok",
+      observation_id: "fresh",
+      captured_at: new Date().toISOString(),
+      surface: { id: "browser", kind: "browser", title: "fixture" },
+      screenshot: {
+        status: "available",
+        image_ref: "before",
+        width: 1280,
+        height: 800,
+      },
+      controls: { status: "available", items: [] },
+    },
+    image: { ref: "before", mimeType: "image/png", bytes },
+  };
+  const target = { kind: "point", x: 60, y: 70 } as const;
+  expect(() => recordDurableTarget(target, capture)).toThrow(
+    "REFERENCE_BOUNDS_REQUIRED",
+  );
+  const recorded = recordDurableTarget(target, capture, {
+    visual_reference: {
+      rect: { left: 40, top: 50, width: 40, height: 40 },
+      relative_point: { u: 0.5, v: 0.5 },
+      description: "synthetic control",
+    },
+  });
+  const crop = PNG.sync.read(recorded.crop!);
+  expect(crop.width).toBe(40);
+  expect(crop.data[0]).toBe(30);
+  expect(JSON.stringify(recorded.target)).not.toContain("observation_id");
+  expect(() =>
+    recordDurableTarget(
+      target,
+      { ...capture, image: { ...capture.image!, ref: "after" } },
+      {
+        visual_reference: {
+          rect: { left: 40, top: 50, width: 40, height: 40 },
+          relative_point: { u: 0.5, v: 0.5 },
+          description: "control",
+        },
+      },
+    ),
+  ).toThrow("REFERENCE_CAPTURE_REQUIRED");
+});

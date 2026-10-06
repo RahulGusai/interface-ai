@@ -1,5 +1,5 @@
 import { z } from "zod";
-import {discoveryProposal} from "./discovery-proposal.js";
+import { discoveryProposal } from "./discovery-proposal.js";
 export const finishTaskInput = z.strictObject({
   observation_id: z.string().min(1),
   outcome: z.enum(["goal_achieved", "business_outcome", "unable_to_complete"]),

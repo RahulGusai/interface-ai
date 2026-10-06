@@ -24,8 +24,16 @@ export const controlSchema = z.strictObject({
     expanded: z.boolean().optional(),
   }),
   value: z.string().optional(),
-  ancestry: z.array(z.strictObject({role:z.string(),name:z.string(),exact:z.literal(true)})).optional(),
-  frame: z.strictObject({name:z.string(),url_path:z.string()}).optional(),
+  ancestry: z
+    .array(
+      z.strictObject({
+        role: z.string(),
+        name: z.string(),
+        exact: z.literal(true),
+      }),
+    )
+    .optional(),
+  frame: z.strictObject({ name: z.string(), url_path: z.string() }).optional(),
 });
 export const observationSchema = z.discriminatedUnion("status", [
   z.strictObject({

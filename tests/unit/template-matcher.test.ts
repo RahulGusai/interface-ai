@@ -1,4 +1,43 @@
-import{it,expect}from'vitest';import{PNG}from'pngjs';import{matchTemplate}from'../../src/replay/template-matcher.js';
-function fixture(duplicate=false){const shot=new PNG({width:1280,height:800}),crop=new PNG({width:32,height:32});shot.data.fill(255);for(let y=0;y<32;y++)for(let x=0;x<32;x++){const i=(y*32+x)*4;crop.data[i]=(x*53+y*19)%256;crop.data[i+1]=(y*61+x*17)%256;crop.data[i+2]=(x*29+y*47)%256;crop.data[i+3]=255;}for(const left of duplicate?[70,500]:[70])for(let y=0;y<32;y++)for(let x=0;x<32;x++)crop.data.copy(shot.data,((y+90)*1280+x+left)*4,(y*32+x)*4,(y*32+x)*4+4);return{shot:PNG.sync.write(shot),crop:PNG.sync.write(crop)};}
-it('resolves shifted RGB anchor within the performance gate',()=>{const{shot,crop}=fixture();const start=performance.now();const candidates=matchTemplate(shot,crop,.95);expect(candidates).toHaveLength(1);expect(candidates[0]).toMatchObject({left:70,top:90,score:1});expect(performance.now()-start).toBeLessThan(2000);});
-it('keeps separate matching anchors and rejects flat crops',()=>{const{shot,crop}=fixture(true);expect(matchTemplate(shot,crop,.95)).toHaveLength(2);const flat=new PNG({width:32,height:32});flat.data.fill(255);expect(()=>matchTemplate(shot,PNG.sync.write(flat),.95)).toThrow('REFERENCE_UNINFORMATIVE');});
+import { it, expect } from "vitest";
+import { PNG } from "pngjs";
+import { matchTemplate } from "../../src/replay/template-matcher.js";
+function fixture(duplicate = false) {
+  const shot = new PNG({ width: 1280, height: 800 }),
+    crop = new PNG({ width: 32, height: 32 });
+  shot.data.fill(255);
+  for (let y = 0; y < 32; y++)
+    for (let x = 0; x < 32; x++) {
+      const i = (y * 32 + x) * 4;
+      crop.data[i] = (x * 53 + y * 19) % 256;
+      crop.data[i + 1] = (y * 61 + x * 17) % 256;
+      crop.data[i + 2] = (x * 29 + y * 47) % 256;
+      crop.data[i + 3] = 255;
+    }
+  for (const left of duplicate ? [70, 500] : [70])
+    for (let y = 0; y < 32; y++)
+      for (let x = 0; x < 32; x++)
+        crop.data.copy(
+          shot.data,
+          ((y + 90) * 1280 + x + left) * 4,
+          (y * 32 + x) * 4,
+          (y * 32 + x) * 4 + 4,
+        );
+  return { shot: PNG.sync.write(shot), crop: PNG.sync.write(crop) };
+}
+it("resolves shifted RGB anchor within the performance gate", () => {
+  const { shot, crop } = fixture();
+  const start = performance.now();
+  const candidates = matchTemplate(shot, crop, 0.95);
+  expect(candidates).toHaveLength(1);
+  expect(candidates[0]).toMatchObject({ left: 70, top: 90, score: 1 });
+  expect(performance.now() - start).toBeLessThan(2000);
+});
+it("keeps separate matching anchors and rejects flat crops", () => {
+  const { shot, crop } = fixture(true);
+  expect(matchTemplate(shot, crop, 0.95)).toHaveLength(2);
+  const flat = new PNG({ width: 32, height: 32 });
+  flat.data.fill(255);
+  expect(() => matchTemplate(shot, PNG.sync.write(flat), 0.95)).toThrow(
+    "REFERENCE_UNINFORMATIVE",
+  );
+});

@@ -6,6 +6,6 @@ export interface ModelClient {
   complete(
     messages: InternalMessage[],
     tools: typeof toolDefinitions,
-    options?: {signal?: AbortSignal},
+    options?: { signal?: AbortSignal },
   ): Promise<AgentTurn>;
 }

@@ -1,6 +1,6 @@
-import {verifyProposal,type DiscoveryContext} from "./discovery-context.js";
-import {recordDurableTarget,recordingHint} from "./target-recorder.js";
-import type {Capture} from "../contracts/observation.js";
+import { verifyProposal, type DiscoveryContext } from "./discovery-context.js";
+import { recordDurableTarget, recordingHint } from "./target-recorder.js";
+import type { Capture } from "../contracts/observation.js";
 import {
   agentTurnSchema,
   runResultSchema,
@@ -50,8 +50,26 @@ export async function runTask(
   let modelTurn = 0;
   let remainingProposals: import("../contracts/run.js").ToolCall[] = [];
   let auditFailed = false;
-  let currentCapture:Capture|undefined;
-  const definitions=options.discovery?toolDefinitions.map(d=>['click','type_text','scroll'].includes(d.function.name)?{...d,function:{...d.function,parameters:{...d.function.parameters,properties:{...(d.function.parameters as any).properties,recording_hint:recordingHint.toJSONSchema()}}}}:d):toolDefinitions;
+  let currentCapture: Capture | undefined;
+  const definitions = options.discovery
+    ? toolDefinitions.map((d) =>
+        ["click", "type_text", "scroll"].includes(d.function.name)
+          ? {
+              ...d,
+              function: {
+                ...d.function,
+                parameters: {
+                  ...d.function.parameters,
+                  properties: {
+                    ...(d.function.parameters as any).properties,
+                    recording_hint: recordingHint.toJSONSchema(),
+                  },
+                },
+              },
+            }
+          : d,
+      )
+    : toolDefinitions;
   const audit: AuditSink = async (record, image) => {
     if (auditFailed) throw new Error("Audit unavailable");
     try {
@@ -66,42 +84,119 @@ export async function runTask(
     source: "bootstrap" | "model",
   ) => {
     let parsed: any;
-    let recordedTarget:any;
-    let hint:any;
+    let recordedTarget: any;
+    let hint: any;
     try {
       parsed = JSON.parse(call.argumentsJson);
     } catch {
       parsed = null;
     }
-    if(options.discovery&&parsed&&typeof parsed==='object'){
-      hint=parsed.recording_hint;delete parsed.recording_hint;
-      if(call.name==='finish_task'&&parsed.outcome==='goal_achieved'){
-        try{
-          if(!parsed.proposal)throw Error('DURABLE_PLAN_REQUIRED');
-          const fresh=await context!.adapter.capture('both');
-          options.discovery.proposal=verifyProposal(parsed.proposal,options.discovery,fresh);
-          context!.policy.config.validateOutputs=outputs=>{try{return JSON.stringify(outputs)===JSON.stringify(options.discovery!.proposal!.observed_outputs);}catch{return false;}};
-          if(fresh.observation.status!=='ok')throw Error('CAPTURE_FAILED');parsed.observation_id=fresh.observation.observation_id;
-        }catch{return{result:{status:'rejected' as const,code:'DURABLE_PROPOSAL_INVALID',message:'Supply an observed durable plan with valid contract, inputs, targets and fresh success checks'}};}
+    if (options.discovery && parsed && typeof parsed === "object") {
+      hint = parsed.recording_hint;
+      delete parsed.recording_hint;
+      if (call.name === "finish_task" && parsed.outcome === "goal_achieved") {
+        try {
+          if (!parsed.proposal) throw Error("DURABLE_PLAN_REQUIRED");
+          const fresh = await context!.adapter.capture("both");
+          options.discovery.proposal = verifyProposal(
+            parsed.proposal,
+            options.discovery,
+            fresh,
+          );
+          context!.policy.config.validateOutputs = (outputs) => {
+            try {
+              return (
+                JSON.stringify(outputs) ===
+                JSON.stringify(options.discovery!.proposal!.observed_outputs)
+              );
+            } catch {
+              return false;
+            }
+          };
+          if (fresh.observation.status !== "ok") throw Error("CAPTURE_FAILED");
+          parsed.observation_id = fresh.observation.observation_id;
+        } catch {
+          return {
+            result: {
+              status: "rejected" as const,
+              code: "DURABLE_PROPOSAL_INVALID",
+              message:
+                "Supply an observed durable plan with valid contract, inputs, targets and fresh success checks",
+            },
+          };
+        }
       }
-      if(parsed.target){
-        if(!currentCapture||currentCapture.observation.status!=='ok'||parsed.observation_id!==currentCapture.observation.observation_id)throw Error('REFERENCE_CAPTURE_REQUIRED');
-        const recorded=recordDurableTarget(parsed.target,currentCapture,hint);recordedTarget=recorded.target;
-        if(recorded.crop){await options.discovery.recordReference?.(recorded,recorded.crop,currentCapture,call.id);}
+      if (parsed.target) {
+        if (
+          !currentCapture ||
+          currentCapture.observation.status !== "ok" ||
+          parsed.observation_id !== currentCapture.observation.observation_id
+        )
+          throw Error("REFERENCE_CAPTURE_REQUIRED");
+        const recorded = recordDurableTarget(
+          parsed.target,
+          currentCapture,
+          hint,
+        );
+        recordedTarget = recorded.target;
+        if (recorded.crop) {
+          await options.discovery.recordReference?.(
+            recorded,
+            recorded.crop,
+            currentCapture,
+            call.id,
+          );
+        }
       }
-      if(call.name==='extract_data'){
-        if(!currentCapture)throw Error('REFERENCE_CAPTURE_REQUIRED');parsed._durable_fields=Object.fromEntries(parsed.fields.map((f:any)=>[f.name,recordDurableTarget(f.target,currentCapture!).target]));
+      if (call.name === "extract_data") {
+        if (!currentCapture) throw Error("REFERENCE_CAPTURE_REQUIRED");
+        parsed._durable_fields = Object.fromEntries(
+          parsed.fields.map((f: any) => [
+            f.name,
+            recordDurableTarget(f.target, currentCapture!).target,
+          ]),
+        );
       }
     }
-    const normalized={...parsed};delete normalized._durable_fields;
-    const dispatchedCall={...call,argumentsJson:JSON.stringify(normalized)};
-    await audit({ type: "tool_started", modelTurn, call, input: normalized, source, ...({proposed_input:JSON.parse(call.argumentsJson),durable_target:recordedTarget} as any) });
+    const normalized = { ...parsed };
+    delete normalized._durable_fields;
+    const dispatchedCall = {
+      ...call,
+      argumentsJson: JSON.stringify(normalized),
+    };
+    await audit({
+      type: "tool_started",
+      modelTurn,
+      call,
+      input: normalized,
+      source,
+      ...({
+        proposed_input: JSON.parse(call.argumentsJson),
+        durable_target: recordedTarget,
+      } as any),
+    });
     const started = performance.now();
     options.signal?.throwIfAborted();
     const response = await dispatchTool(context!, dispatchedCall);
-    const observation="observation" in response.result?response.result.observation:response.result.status==="ok"?response.result:undefined;
-    if(observation)currentCapture={observation,image:response.image};
-    if(options.discovery&&source==='model'&&!['finish_task','request_human'].includes(call.name))options.discovery.records.push({call_id:call.id,tool:call.name,input:parsed,target:recordedTarget,result:response.result});
+    const observation =
+      "observation" in response.result
+        ? response.result.observation
+        : response.result.status === "ok"
+          ? response.result
+          : undefined;
+    if (observation) currentCapture = { observation, image: response.image };
+    if (
+      options.discovery &&
+      source === "model" &&
+      !["finish_task", "request_human"].includes(call.name)
+    )
+      options.discovery.records.push({
+        call_id: call.id,
+        tool: call.name,
+        input: parsed,
+        target: recordedTarget,
+        result: response.result,
+      });
     await audit(
       {
         type: "tool_finished",
@@ -194,7 +289,17 @@ export async function runTask(
       maxToolCalls: budget,
       toolCallsUsed: 0,
     };
-    if(options.discovery)context.history.messages.push({role:"system",content:JSON.stringify({instructions:"You are discovering a reusable operation. On goal_achieved finish_task requires proposal_version 1 and an observed durable definition. Use ordered steps with semantic role/name targets (exact true, scope null or ancestry) and bindings. Never put observation/control/call IDs or global points in saved steps. Use kind input/path for parameters, step_output for extracted results, environment base_url for entry. Include finite success checks and typed output mapping. Propose reuse of a catalog capability only for the same operation with identical schemas; otherwise propose new with a reason. Point actions require recording_hint.visual_reference rectangle and relative_point from the actual current screenshot before action; reference handles returned in history must be used in the final plan. Non-success outcomes do not publish.",deployment:options.discovery.deployment,capability_catalog:options.discovery.capability_catalog,requested_inputs:options.discovery.inputs})});
+    if (options.discovery)
+      context.history.messages.push({
+        role: "system",
+        content: JSON.stringify({
+          instructions:
+            "You are discovering a reusable operation. On goal_achieved finish_task requires proposal_version 1 and an observed durable definition. Use ordered steps with semantic role/name targets (exact true, scope null or ancestry) and bindings. Never put observation/control/call IDs or global points in saved steps. Use kind input/path for parameters, step_output for extracted results, environment base_url for entry. Include finite success checks and typed output mapping. Propose reuse of a catalog capability only for the same operation with identical schemas; otherwise propose new with a reason. Point actions require recording_hint.visual_reference rectangle and relative_point from the actual current screenshot before action; reference handles returned in history must be used in the final plan. Non-success outcomes do not publish.",
+          deployment: options.discovery.deployment,
+          capability_catalog: options.discovery.capability_catalog,
+          requested_inputs: options.discovery.inputs,
+        }),
+      });
     const bootstrap = await invoke(
       {
         id: "bootstrap",
@@ -219,7 +324,20 @@ export async function runTask(
     let index = 0;
     while (used < budget) {
       options.signal?.throwIfAborted();
-      if(options.discovery?.references.length)context.history.messages.push({role:"system",content:JSON.stringify({reference_assets:options.discovery.references.map(({asset_handle,sha256,capture_context,relative_point})=>({asset_handle,sha256,capture_context,relative_point}))})});
+      if (options.discovery?.references.length)
+        context.history.messages.push({
+          role: "system",
+          content: JSON.stringify({
+            reference_assets: options.discovery.references.map(
+              ({ asset_handle, sha256, capture_context, relative_point }) => ({
+                asset_handle,
+                sha256,
+                capture_context,
+                relative_point,
+              }),
+            ),
+          }),
+        });
       emit({ type: "model_turn", index: ++index });
       modelTurn = index;
       let turn;
@@ -230,7 +348,7 @@ export async function runTask(
               m.role === "observation" ? m : deps.policy.sanitize(m),
             ),
             definitions,
-            {signal:options.signal},
+            { signal: options.signal },
           ),
         );
       } catch {
@@ -260,7 +378,9 @@ export async function runTask(
       try {
         context.history.appendAssistantToolCalls(turn.assistantMessage);
       } catch {
-        return await stop(result("provider_error", "Invalid tool-call history"));
+        return await stop(
+          result("provider_error", "Invalid tool-call history"),
+        );
       }
       for (const call of turn.calls) {
         options.signal?.throwIfAborted();
@@ -330,7 +450,9 @@ export async function runTask(
         }
       }
     }
-    return await stop(result("max_tool_calls_reached", "Tool-call budget exhausted"));
+    return await stop(
+      result("max_tool_calls_reached", "Tool-call budget exhausted"),
+    );
   } catch {
     return await stop(
       result("tool_error", "Browser execution or observation failed", {

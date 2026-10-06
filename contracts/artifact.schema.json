@@ -28,11 +28,7 @@
           ]
         }
       },
-      "required": [
-        "product_id",
-        "ui_variant",
-        "vendor_release"
-      ],
+      "required": ["product_id", "ui_variant", "vendor_release"],
       "additionalProperties": false
     },
     "input_schema": {
@@ -60,11 +56,7 @@
             "properties": {
               "type": {
                 "type": "string",
-                "enum": [
-                  "string",
-                  "number",
-                  "boolean"
-                ]
+                "enum": ["string", "number", "boolean"]
               },
               "description": {
                 "type": "string"
@@ -110,9 +102,7 @@
                 ]
               }
             },
-            "required": [
-              "type"
-            ],
+            "required": ["type"],
             "additionalProperties": false
           }
         },
@@ -127,12 +117,7 @@
           "const": false
         }
       },
-      "required": [
-        "type",
-        "properties",
-        "required",
-        "additionalProperties"
-      ],
+      "required": ["type", "properties", "required", "additionalProperties"],
       "additionalProperties": false
     },
     "output_schema": {
@@ -160,11 +145,7 @@
             "properties": {
               "type": {
                 "type": "string",
-                "enum": [
-                  "string",
-                  "number",
-                  "boolean"
-                ]
+                "enum": ["string", "number", "boolean"]
               },
               "description": {
                 "type": "string"
@@ -210,9 +191,7 @@
                 ]
               }
             },
-            "required": [
-              "type"
-            ],
+            "required": ["type"],
             "additionalProperties": false
           }
         },
@@ -227,12 +206,7 @@
           "const": false
         }
       },
-      "required": [
-        "type",
-        "properties",
-        "required",
-        "additionalProperties"
-      ],
+      "required": ["type", "properties", "required", "additionalProperties"],
       "additionalProperties": false
     },
     "entry": {
@@ -248,10 +222,7 @@
           }
         }
       },
-      "required": [
-        "url",
-        "checks"
-      ],
+      "required": ["url", "checks"],
       "additionalProperties": false
     },
     "steps": {
@@ -336,18 +307,11 @@
                                   "type": "string"
                                 }
                               },
-                              "required": [
-                                "name",
-                                "url_path"
-                              ],
+                              "required": ["name", "url_path"],
                               "additionalProperties": false
                             }
                           },
-                          "required": [
-                            "role",
-                            "name",
-                            "exact"
-                          ],
+                          "required": ["role", "name", "exact"],
                           "additionalProperties": false
                         }
                       },
@@ -413,10 +377,7 @@
                         "exclusiveMaximum": 1
                       }
                     },
-                    "required": [
-                      "u",
-                      "v"
-                    ],
+                    "required": ["u", "v"],
                     "additionalProperties": false
                   },
                   "capture_context": {
@@ -614,18 +575,11 @@
                                                 "type": "string"
                                               }
                                             },
-                                            "required": [
-                                              "name",
-                                              "url_path"
-                                            ],
+                                            "required": ["name", "url_path"],
                                             "additionalProperties": false
                                           }
                                         },
-                                        "required": [
-                                          "role",
-                                          "name",
-                                          "exact"
-                                        ],
+                                        "required": ["role", "name", "exact"],
                                         "additionalProperties": false
                                       }
                                     },
@@ -691,10 +645,7 @@
                                       "exclusiveMaximum": 1
                                     }
                                   },
-                                  "required": [
-                                    "u",
-                                    "v"
-                                  ],
+                                  "required": ["u", "v"],
                                   "additionalProperties": false
                                 },
                                 "capture_context": {
@@ -886,10 +837,7 @@
               "$ref": "#/$defs/__schema1"
             }
           },
-          "required": [
-            "kind",
-            "value"
-          ],
+          "required": ["kind", "value"],
           "additionalProperties": false
         },
         {
@@ -903,10 +851,7 @@
               "type": "string"
             }
           },
-          "required": [
-            "kind",
-            "path"
-          ],
+          "required": ["kind", "path"],
           "additionalProperties": false
         },
         {
@@ -923,11 +868,7 @@
               "type": "string"
             }
           },
-          "required": [
-            "kind",
-            "step_id",
-            "path"
-          ],
+          "required": ["kind", "step_id", "path"],
           "additionalProperties": false
         },
         {
@@ -942,10 +883,7 @@
               "const": "base_url"
             }
           },
-          "required": [
-            "kind",
-            "path"
-          ],
+          "required": ["kind", "path"],
           "additionalProperties": false
         },
         {
@@ -967,10 +905,7 @@
                   "const": "base_url"
                 }
               },
-              "required": [
-                "kind",
-                "path"
-              ],
+              "required": ["kind", "path"],
               "additionalProperties": false
             },
             "path": {
@@ -978,11 +913,7 @@
               "pattern": "^\\/.*"
             }
           },
-          "required": [
-            "kind",
-            "base",
-            "path"
-          ],
+          "required": ["kind", "base", "path"],
           "additionalProperties": false
         },
         {
@@ -1000,10 +931,7 @@
               }
             }
           },
-          "required": [
-            "kind",
-            "parts"
-          ],
+          "required": ["kind", "parts"],
           "additionalProperties": false
         }
       ]
@@ -1050,10 +978,7 @@
             },
             "kind": {
               "type": "string",
-              "enum": [
-                "all",
-                "any"
-              ]
+              "enum": ["all", "any"]
             },
             "checks": {
               "minItems": 1,
@@ -1063,11 +988,7 @@
               }
             }
           },
-          "required": [
-            "check_id",
-            "kind",
-            "checks"
-          ],
+          "required": ["check_id", "kind", "checks"],
           "additionalProperties": false
         },
         {
@@ -1079,10 +1000,7 @@
             },
             "kind": {
               "type": "string",
-              "enum": [
-                "tool_status_equals",
-                "tool_verification"
-              ]
+              "enum": ["tool_status_equals", "tool_verification"]
             },
             "step_id": {
               "type": "string"
@@ -1091,11 +1009,7 @@
               "type": "string"
             }
           },
-          "required": [
-            "check_id",
-            "kind",
-            "expected"
-          ],
+          "required": ["check_id", "kind", "expected"],
           "additionalProperties": false
         },
         {
@@ -1116,12 +1030,7 @@
               "$ref": "#/$defs/__schema0"
             }
           },
-          "required": [
-            "check_id",
-            "kind",
-            "actual",
-            "expected"
-          ],
+          "required": ["check_id", "kind", "actual", "expected"],
           "additionalProperties": false
         },
         {
@@ -1188,18 +1097,11 @@
                                     "type": "string"
                                   }
                                 },
-                                "required": [
-                                  "name",
-                                  "url_path"
-                                ],
+                                "required": ["name", "url_path"],
                                 "additionalProperties": false
                               }
                             },
-                            "required": [
-                              "role",
-                              "name",
-                              "exact"
-                            ],
+                            "required": ["role", "name", "exact"],
                             "additionalProperties": false
                           }
                         },
@@ -1265,10 +1167,7 @@
                           "exclusiveMaximum": 1
                         }
                       },
-                      "required": [
-                        "u",
-                        "v"
-                      ],
+                      "required": ["u", "v"],
                       "additionalProperties": false
                     },
                     "capture_context": {
@@ -1323,11 +1222,7 @@
               "$ref": "#/$defs/__schema0"
             }
           },
-          "required": [
-            "check_id",
-            "kind",
-            "target"
-          ],
+          "required": ["check_id", "kind", "target"],
           "additionalProperties": false
         }
       ]
@@ -1382,18 +1277,11 @@
                                 "type": "string"
                               }
                             },
-                            "required": [
-                              "name",
-                              "url_path"
-                            ],
+                            "required": ["name", "url_path"],
                             "additionalProperties": false
                           }
                         },
-                        "required": [
-                          "role",
-                          "name",
-                          "exact"
-                        ],
+                        "required": ["role", "name", "exact"],
                         "additionalProperties": false
                       }
                     },
@@ -1459,10 +1347,7 @@
                       "exclusiveMaximum": 1
                     }
                   },
-                  "required": [
-                    "u",
-                    "v"
-                  ],
+                  "required": ["u", "v"],
                   "additionalProperties": false
                 },
                 "capture_context": {
