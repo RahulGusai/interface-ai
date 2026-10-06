@@ -41,7 +41,7 @@ export type AuditRecord =
       reason: string;
     }
   | { type: "run_finished"; result: RunResult };
-export type AuditSink = (record: AuditRecord, image?: ImageContent) => void;
+export type AuditSink = (record: AuditRecord, image?: ImageContent) => unknown;
 
 /** Synchronous durable writes intentionally fail closed before the next action. */
 export function createFileAudit(directory: string) {

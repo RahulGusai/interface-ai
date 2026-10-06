@@ -36,6 +36,7 @@ export async function runTask(
     maxToolCalls?: number;
     onEvent?: (event: RunEvent) => void;
     onAudit?: AuditSink;
+    signal?: AbortSignal;
   } = {},
 ): Promise<RunResult> {
   const input: TaskInput = parseTaskInput(raw);
@@ -45,10 +46,10 @@ export async function runTask(
   let modelTurn = 0;
   let remainingProposals: import("../contracts/run.js").ToolCall[] = [];
   let auditFailed = false;
-  const audit: AuditSink = (record, image) => {
+  const audit: AuditSink = async (record, image) => {
     if (auditFailed) throw new Error("Audit unavailable");
     try {
-      options.onAudit?.(deps.policy.sanitize(record), image);
+      await options.onAudit?.(deps.policy.sanitize(record), image);
     } catch (error) {
       auditFailed = true;
       throw error;
@@ -64,10 +65,11 @@ export async function runTask(
     } catch {
       parsed = null;
     }
-    audit({ type: "tool_started", modelTurn, call, input: parsed, source });
+    await audit({ type: "tool_started", modelTurn, call, input: parsed, source });
     const started = performance.now();
+    options.signal?.throwIfAborted();
     const response = await dispatchTool(context!, call);
-    audit(
+    await audit(
       {
         type: "tool_finished",
         modelTurn,
@@ -101,17 +103,17 @@ export async function runTask(
       /* Diagnostic observers cannot control execution. */
     }
   };
-  const stop = (r: RunResult) => {
+  const stop = async (r: RunResult) => {
     if (!auditFailed) {
       if (remainingProposals.length)
-        audit({
+        await audit({
           type: "tool_not_executed",
           modelTurn,
           calls: remainingProposals,
           reason: r.status,
         });
       remainingProposals = [];
-      audit({ type: "run_finished", result: r });
+      await audit({ type: "run_finished", result: r });
     }
     if (r.status === "needs_intervention")
       emit({ type: "intervention_requested", reason: r.summary });
@@ -137,17 +139,18 @@ export async function runTask(
       input: { url: input.targetUrl },
     }) !== "allow"
   )
-    return stop(
+    return await stop(
       result("policy_blocked", "Initial destination denied by trusted policy"),
     );
   emit({ type: "started", targetUrl: input.targetUrl });
   try {
-    audit({
+    await audit({
       type: "run_started",
       targetUrl: input.targetUrl,
       goal: input.goal,
       maxToolCalls: budget,
     });
+    options.signal?.throwIfAborted();
     const adapter = await deps.adapterFactory.createForTask(input, deps.policy);
     context = {
       adapter,
@@ -167,7 +170,7 @@ export async function runTask(
       "bootstrap",
     );
     if (bootstrap.result.status !== "completed")
-      return stop(
+      return await stop(
         result(
           context.halted
             ? "needs_intervention"
@@ -181,6 +184,7 @@ export async function runTask(
     addImage(bootstrap, "bootstrap");
     let index = 0;
     while (used < budget) {
+      options.signal?.throwIfAborted();
       emit({ type: "model_turn", index: ++index });
       modelTurn = index;
       let turn;
@@ -191,10 +195,11 @@ export async function runTask(
               m.role === "observation" ? m : deps.policy.sanitize(m),
             ),
             toolDefinitions,
+            {signal:options.signal},
           ),
         );
       } catch {
-        return stop(
+        return await stop(
           result("provider_error", "Provider request or protocol failed", {
             error: {
               code: "PROVIDER_ERROR",
@@ -203,14 +208,15 @@ export async function runTask(
           }),
         );
       }
+      options.signal?.throwIfAborted();
       if (turn.kind === "final_text") {
-        audit({ type: "model_final_text", modelTurn, text: turn.text });
-        return stop(result("agent_stopped_unverified", turn.text));
+        await audit({ type: "model_final_text", modelTurn, text: turn.text });
+        return await stop(result("agent_stopped_unverified", turn.text));
       }
       remainingProposals = [...turn.calls];
-      audit({ type: "model_proposed", modelTurn, calls: turn.calls });
+      await audit({ type: "model_proposed", modelTurn, calls: turn.calls });
       if (turn.calls.length > budget - used)
-        return stop(
+        return await stop(
           result(
             "max_tool_calls_reached",
             "Proposed batch exceeds remaining tool-call budget",
@@ -219,9 +225,10 @@ export async function runTask(
       try {
         context.history.appendAssistantToolCalls(turn.assistantMessage);
       } catch {
-        return stop(result("provider_error", "Invalid tool-call history"));
+        return await stop(result("provider_error", "Invalid tool-call history"));
       }
       for (const call of turn.calls) {
+        options.signal?.throwIfAborted();
         used++;
         context.toolCallsUsed = used;
         emit({
@@ -248,11 +255,11 @@ export async function runTask(
           ("blocker" in response.result &&
             response.result.blocker?.kind === "policy")
         )
-          return stop(
+          return await stop(
             result("policy_blocked", "Action denied by trusted policy"),
           );
         if (context.halted || response.result.status === "needs_intervention")
-          return stop(
+          return await stop(
             result(
               response.result.status === "error"
                 ? "tool_error"
@@ -276,7 +283,7 @@ export async function runTask(
           const proposed = finishTaskInput.parse(
             JSON.parse(call.argumentsJson),
           );
-          return stop(
+          return await stop(
             result(
               proposed.outcome === "goal_achieved"
                 ? "awaiting_artifact_design"
@@ -288,9 +295,9 @@ export async function runTask(
         }
       }
     }
-    return stop(result("max_tool_calls_reached", "Tool-call budget exhausted"));
+    return await stop(result("max_tool_calls_reached", "Tool-call budget exhausted"));
   } catch {
-    return stop(
+    return await stop(
       result("tool_error", "Browser execution or observation failed", {
         error: {
           code: "RUNTIME_ERROR",

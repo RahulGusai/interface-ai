@@ -39,6 +39,7 @@ export class OpenRouterClient implements ModelClient {
   async complete(
     messages: InternalMessage[],
     tools: typeof toolDefinitions,
+    options: {signal?: AbortSignal} = {},
   ): Promise<AgentTurn> {
     const projected = projectMessages(messages);
     let response: Response;
@@ -58,7 +59,7 @@ export class OpenRouterClient implements ModelClient {
             parallel_tool_calls: false,
             stream: false,
           }),
-          signal: AbortSignal.timeout(120000),
+          signal: options.signal ? AbortSignal.any([options.signal,AbortSignal.timeout(120000)]) : AbortSignal.timeout(120000),
         },
       );
     } catch {

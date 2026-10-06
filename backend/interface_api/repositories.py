@@ -69,3 +69,21 @@ class Repository:
         for asset in assets:self.insert(conn,'evidence_assets',{**asset,'run_id':run_id,'event_sequence':seq})
         conn.execute('UPDATE runs SET last_event_sequence=? WHERE run_id=?',(seq,run_id))
         return {'run_id':run_id,'sequence':seq,'timestamp':stamp,'type':type,'step_id':step_id,'payload':payload or {}}
+
+    def new_run(self,conn,dep,kind='discovery',purpose='user',artifact=None,binding=None,task=None,inputs=None,selection='discovery',parent=None,key=None,request_hash=None):
+        data={'run_id':identifier(),'kind':kind,'purpose':purpose,'app_deployment_id':dep['app_deployment_id'],'deployment_snapshot_json':canonical({k:v for k,v in dep.items() if k not in ('created_at','updated_at')}),'capability_id':artifact['capability_id'] if artifact else None,'pinned_artifact_id':artifact['artifact_id'] if artifact else None,'artifact_version':artifact['version'] if artifact else None,'artifact_definition_sha256':artifact['definition_sha256'] if artifact else None,'selection_source':selection,'binding_id':binding['binding_id'] if binding else None,'binding_version':binding['binding_version'] if binding else None,'binding_snapshot_json':canonical(binding) if binding else None,'parent_run_id':parent,'task':task,'inputs_json':canonical(inputs or {}),'status':'queued','idempotency_key':key,'request_sha256':request_hash,'created_at':now()}
+        self.insert(conn,'runs',data);self.event(data['run_id'],'run_queued',{'request':{'kind':kind,'task':task,'inputs':inputs or {}},'purpose':purpose},conn=conn)
+        return self.get('runs','run_id',data['run_id'],conn)
+
+    def transition(self,run_id,status,result=None,runtime=None,conn=None):
+        if conn is None:
+            with self.db.transaction() as c:return self.transition(run_id,status,result,runtime,c)
+        current=self.get('runs','run_id',run_id,conn)
+        allowed={'queued':{'running','cancelled','interrupted','failed'},'running':{'awaiting_finalization','completed','failed','cancelling','interrupted'},'awaiting_finalization':{'validating','failed','cancelling','interrupted'},'validating':{'completed','failed','cancelling','interrupted'},'cancelling':{'cancelled','interrupted'},'failed':{'validating'},'interrupted':{'validating'}}
+        if status==current['status']:return current
+        if status not in allowed.get(current['status'],set()):raise ApiError(409,'RUN_STATUS_CONFLICT','Run status does not permit this transition')
+        stamp=now();terminal=status in ('completed','failed','cancelled','interrupted')
+        conn.execute('UPDATE runs SET status=?,started_at=COALESCE(started_at,?),finished_at=?,result_json=?,runtime_result_json=COALESCE(?,runtime_result_json) WHERE run_id=?',(status,stamp if status=='running' else None,stamp if terminal else None,canonical(result) if result else None,canonical(runtime) if runtime else None,run_id))
+        event='run_started' if status=='running' else 'run_'+status
+        self.event(run_id,event,result or {},conn=conn)
+        return self.get('runs','run_id',run_id,conn)
