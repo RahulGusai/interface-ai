@@ -9,6 +9,11 @@ from .db import Database
 from .repositories import Repository
 from .errors import install_errors
 from .api import router
+from .storage import Storage
+from .bridge import NodeRunner
+from .worker import Worker
+from .lifecycle import Lifecycle
+from .services import Services
 
 
 class RuntimeCORS:
@@ -32,11 +37,22 @@ def create_app(settings:Settings|None=None,storage=None,runner=None):
         except BlockingIOError:
             lock.close();raise RuntimeError('Only one API process may own this database')
         application.state.repo=Repository(db)
-        application.state.storage=storage
-        application.state.worker=None
+        store=storage or Storage.from_settings(config);storage_ready=False
+        if store:
+            try:await asyncio.wait_for(asyncio.to_thread(store.verify_store),20);storage_ready=True
+            except Exception:pass
+        execution=runner or NodeRunner(config)
+        runner_ready=True if runner else await execution.probe()
+        application.state.storage=store
+        worker=Worker(application.state.repo,config,store,execution)
+        lifecycle=Lifecycle(application.state.repo,worker,store);worker.lifecycle=lifecycle
+        application.state.worker=worker
+        application.state.services=Services(application.state.repo,worker,lifecycle,store,storage_ready,runner_ready)
+        await worker.start()
         try:
             yield
         finally:
+            await worker.shutdown()
             fcntl.flock(lock,fcntl.LOCK_UN);lock.close()
     application=FastAPI(title='Interface AI control API',version='1.0.0',lifespan=lifespan)
     application.state.settings=settings
@@ -50,8 +66,10 @@ def create_app(settings:Settings|None=None,storage=None,runner=None):
     @application.get('/health/ready')
     async def ready():
         config=application.state.settings
-        body={'ready':False,'db':'ready','storage':'unavailable','worker':'unavailable','discovery_available':False,'replay_available':False,'execution_location':config.environment,'handoff':'deferred'}
-        return JSONResponse(body,status_code=503)
+        service=application.state.services;available=service.storage_ready and service.runner_ready and service.worker.accepting
+        discovery=bool(available and config.openrouter_api_key and config.openrouter_model)
+        body={'ready':available,'db':'ready','storage':'ready' if service.storage_ready else 'unavailable','worker':'ready' if service.runner_ready else 'unavailable','discovery_available':discovery,'replay_available':available,'execution_location':config.environment,'handoff':'deferred'}
+        return JSONResponse(body,status_code=200 if available else 503)
     return application
 
 

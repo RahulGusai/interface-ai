@@ -73,7 +73,7 @@ class DiscoveryStart(DTO):
     def nonblank(cls,value):
         if not value.strip():
             raise ValueError('Task cannot be blank')
-        return value.strip()
+        return value
 
 
 class ReplayStart(DTO):

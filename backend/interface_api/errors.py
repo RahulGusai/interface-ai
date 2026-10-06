@@ -20,7 +20,13 @@ def install_errors(app):
     @app.exception_handler(RequestValidationError)
     async def validation(request,error):
         fields=[{'path':'.'.join(str(x) for x in e['loc'] if x!='body'),'code':e['type'],'message':'Invalid field'} for e in error.errors()]
-        return JSONResponse(envelope(ApiError(422,'REQUEST_INVALID','Request fields are invalid',{'fields':fields})),status_code=422)
+        status=400 if any(e['type']=='json_invalid' for e in error.errors()) else 422
+        return JSONResponse(envelope(ApiError(status,'REQUEST_INVALID','Request fields are invalid',{'fields':fields})),status_code=status)
+
+    from starlette.exceptions import HTTPException
+    @app.exception_handler(HTTPException)
+    async def http_error(request,error):
+        return JSONResponse(envelope(ApiError(error.status_code,'NOT_FOUND' if error.status_code==404 else 'HTTP_ERROR','Requested resource was not found' if error.status_code==404 else 'Request could not be completed')),status_code=error.status_code)
 
     @app.exception_handler(Exception)
     async def unexpected(request,error):

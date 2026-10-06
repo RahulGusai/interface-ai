@@ -23,6 +23,12 @@ def validate_message(value,run_id,sequence):
 
 class NodeRunner:
     def __init__(self,settings):self.settings=settings
+    async def probe(self):
+        try:
+            proc=await asyncio.create_subprocess_exec(self.settings.node_bin,'--import','tsx','--input-type=module','-e',"import{chromium}from'playwright';import{existsSync}from'node:fs';const v=Number(process.versions.node.split('.')[0]);process.exit((v===22||v>=24)&&existsSync(chromium.executablePath())?0:1)",cwd=self.settings.repo_root,stdout=asyncio.subprocess.DEVNULL,stderr=asyncio.subprocess.DEVNULL)
+            try:return await asyncio.wait_for(proc.wait(),5)==0
+            except asyncio.TimeoutError:proc.kill();await proc.wait();return False
+        except Exception:return False
     async def run(self,command,sink,cancel):
         s=self.settings
         env={k:v for k,v in os.environ.items() if k in ('PATH','HOME','TMPDIR','PLAYWRIGHT_BROWSERS_PATH','LANG','NODE_EXTRA_CA_CERTS')}
