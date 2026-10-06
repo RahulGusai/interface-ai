@@ -1,0 +1,212 @@
+{
+  "surface": "browser",
+  "compatibility": {
+    "product_id": "desk",
+    "ui_variant": "standard",
+    "vendor_release": null
+  },
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "email": {
+        "type": "string",
+        "format": "email"
+      }
+    },
+    "required": [
+      "email"
+    ],
+    "additionalProperties": false
+  },
+  "output_schema": {
+    "type": "object",
+    "properties": {
+      "status": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "status"
+    ],
+    "additionalProperties": false
+  },
+  "entry": {
+    "url": {
+      "kind": "environment",
+      "path": "base_url"
+    },
+    "checks": [
+      {
+        "check_id": "entry_email",
+        "kind": "control_visible",
+        "target": {
+          "kind": "semantic",
+          "role": "textbox",
+          "name": {
+            "kind": "literal",
+            "value": "Member email"
+          },
+          "exact": true,
+          "scope": null,
+          "required_matches": 1
+        }
+      }
+    ]
+  },
+  "steps": [
+    {
+      "step_id": "s001",
+      "tool": "type_text",
+      "arguments": {
+        "text": {
+          "kind": "input",
+          "path": "email"
+        },
+        "mode": {
+          "kind": "literal",
+          "value": "replace"
+        }
+      },
+      "pre_checks": [],
+      "post_checks": [
+        {
+          "check_id": "typed",
+          "kind": "tool_verification",
+          "expected": "matched"
+        }
+      ],
+      "recoveries": [],
+      "target": {
+        "kind": "semantic",
+        "role": "textbox",
+        "name": {
+          "kind": "literal",
+          "value": "Member email"
+        },
+        "exact": true,
+        "scope": null,
+        "required_matches": 1
+      }
+    },
+    {
+      "step_id": "s002",
+      "tool": "click",
+      "arguments": {},
+      "pre_checks": [],
+      "post_checks": [],
+      "recoveries": [],
+      "target": {
+        "kind": "semantic",
+        "role": "button",
+        "name": {
+          "kind": "literal",
+          "value": "Search"
+        },
+        "exact": true,
+        "scope": null,
+        "required_matches": 1
+      }
+    },
+    {
+      "step_id": "s003",
+      "tool": "click",
+      "arguments": {},
+      "pre_checks": [],
+      "post_checks": [],
+      "recoveries": [],
+      "target": {
+        "kind": "semantic",
+        "role": "link",
+        "name": {
+          "kind": "input",
+          "path": "email"
+        },
+        "exact": true,
+        "scope": null,
+        "required_matches": 1
+      }
+    },
+    {
+      "step_id": "s004",
+      "tool": "extract_data",
+      "arguments": {
+        "fields": [
+          {
+            "name": "status",
+            "target": {
+              "kind": "semantic",
+              "role": "text",
+              "name": {
+                "kind": "literal",
+                "value": "Status"
+              },
+              "exact": true,
+              "scope": null,
+              "required_matches": 1
+            },
+            "property": "text",
+            "output_type": "string"
+          }
+        ]
+      },
+      "pre_checks": [],
+      "post_checks": [],
+      "recoveries": []
+    }
+  ],
+  "success_checks": [
+    {
+      "check_id": "extracted",
+      "kind": "tool_status_equals",
+      "step_id": "s004",
+      "expected": "completed"
+    },
+    {
+      "check_id": "details_visible",
+      "kind": "control_visible",
+      "target": {
+        "kind": "semantic",
+        "role": "heading",
+        "name": {
+          "kind": "literal",
+          "value": "Member details"
+        },
+        "exact": true,
+        "scope": null,
+        "required_matches": 1
+      }
+    }
+  ],
+  "business_outcomes": [
+    {
+      "code": "not_found",
+      "message": "No matching synthetic member",
+      "after_step_id": "s002",
+      "checks": [
+        {
+          "check_id": "empty",
+          "kind": "control_visible",
+          "target": {
+            "kind": "semantic",
+            "role": "text",
+            "name": {
+              "kind": "literal",
+              "value": "No member found"
+            },
+            "exact": true,
+            "scope": null,
+            "required_matches": 1
+          }
+        }
+      ],
+      "output_mapping": {}
+    }
+  ],
+  "output_mapping": {
+    "status": {
+      "kind": "step_output",
+      "step_id": "s004",
+      "path": "fields.status.value"
+    }
+  }
+}

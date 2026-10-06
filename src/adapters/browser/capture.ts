@@ -103,10 +103,17 @@ export async function readSemantics(
       state.checked = input.checked;
     if (e.hasAttribute("aria-expanded"))
       state.expanded = e.getAttribute("aria-expanded") === "true";
+    const ancestry: {role:string,name:string,exact:true}[]=[];
+    for(let p=e.parentElement;p;p=p.parentElement){
+      const role=p.getAttribute('role')??({form:'form',fieldset:'group',nav:'navigation',section:'region'} as Record<string,string>)[p.tagName.toLowerCase()];
+      const name=p.getAttribute('aria-label')??p.getAttribute('aria-labelledby')?.split(/\s+/).map(id=>p!.ownerDocument.getElementById(id)?.textContent??'').join(' ')??'';
+      if(role&&name)ancestry.unshift({role,name:name.trim(),exact:true});
+    }
     return {
       role,
       name,
       state,
+      ancestry,
       ...("value" in e && input.type !== "password"
         ? { value: String(input.value) }
         : {}),
@@ -130,7 +137,7 @@ export async function collectControls(page: Page): Promise<{
         continue;
       }
       const ref = `c${controls.length + 1}`;
-      const control: Control = { ref, ...semantics };
+      const control: Control = { ref, ...semantics, ancestry:[{role:'document',name:frame.name(),exact:true},...(semantics.ancestry??[])], frame:{name:frame.name(),url_path:new URL(frame.url()==='about:blank'?'http://blank/':frame.url()).pathname} };
       if (control.role === "option") {
         const select = await element.evaluateHandle((e) => e.closest("select"));
         try {
