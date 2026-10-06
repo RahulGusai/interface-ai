@@ -1,0 +1,1553 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "surface": {
+      "type": "string",
+      "const": "browser"
+    },
+    "compatibility": {
+      "type": "object",
+      "properties": {
+        "product_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "ui_variant": {
+          "type": "string",
+          "minLength": 1
+        },
+        "vendor_release": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "product_id",
+        "ui_variant",
+        "vendor_release"
+      ],
+      "additionalProperties": false
+    },
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "$schema": {
+          "type": "string",
+          "const": "https://json-schema.org/draft/2020-12/schema"
+        },
+        "type": {
+          "type": "string",
+          "const": "object"
+        },
+        "description": {
+          "type": "string"
+        },
+        "properties": {
+          "type": "object",
+          "propertyNames": {
+            "type": "string",
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+          },
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "string",
+                  "number",
+                  "boolean"
+                ]
+              },
+              "description": {
+                "type": "string"
+              },
+              "enum": {
+                "minItems": 1,
+                "type": "array",
+                "items": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "boolean"
+                    }
+                  ]
+                }
+              },
+              "format": {
+                "type": "string",
+                "const": "email"
+              },
+              "minimum": {
+                "type": "number"
+              },
+              "maximum": {
+                "type": "number"
+              },
+              "default": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "boolean"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "type"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": {
+          "type": "boolean",
+          "const": false
+        }
+      },
+      "required": [
+        "type",
+        "properties",
+        "required",
+        "additionalProperties"
+      ],
+      "additionalProperties": false
+    },
+    "output_schema": {
+      "type": "object",
+      "properties": {
+        "$schema": {
+          "type": "string",
+          "const": "https://json-schema.org/draft/2020-12/schema"
+        },
+        "type": {
+          "type": "string",
+          "const": "object"
+        },
+        "description": {
+          "type": "string"
+        },
+        "properties": {
+          "type": "object",
+          "propertyNames": {
+            "type": "string",
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+          },
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "string",
+                  "number",
+                  "boolean"
+                ]
+              },
+              "description": {
+                "type": "string"
+              },
+              "enum": {
+                "minItems": 1,
+                "type": "array",
+                "items": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "boolean"
+                    }
+                  ]
+                }
+              },
+              "format": {
+                "type": "string",
+                "const": "email"
+              },
+              "minimum": {
+                "type": "number"
+              },
+              "maximum": {
+                "type": "number"
+              },
+              "default": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "boolean"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "type"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": {
+          "type": "boolean",
+          "const": false
+        }
+      },
+      "required": [
+        "type",
+        "properties",
+        "required",
+        "additionalProperties"
+      ],
+      "additionalProperties": false
+    },
+    "entry": {
+      "type": "object",
+      "properties": {
+        "url": {
+          "$ref": "#/$defs/__schema0"
+        },
+        "checks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/__schema2"
+          }
+        }
+      },
+      "required": [
+        "url",
+        "checks"
+      ],
+      "additionalProperties": false
+    },
+    "steps": {
+      "minItems": 1,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "step_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_]+$"
+          },
+          "tool": {
+            "type": "string",
+            "enum": [
+              "observe_ui",
+              "navigate",
+              "click",
+              "type_text",
+              "press_key",
+              "scroll",
+              "select_option",
+              "wait_for",
+              "check_ui",
+              "extract_data"
+            ]
+          },
+          "arguments": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {
+              "$ref": "#/$defs/__schema3"
+            }
+          },
+          "target": {
+            "oneOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "const": "semantic"
+                  },
+                  "role": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "name": {
+                    "$ref": "#/$defs/__schema0"
+                  },
+                  "exact": {
+                    "type": "boolean",
+                    "const": true
+                  },
+                  "scope": {
+                    "anyOf": [
+                      {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "role": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "name": {
+                              "type": "string"
+                            },
+                            "exact": {
+                              "type": "boolean",
+                              "const": true
+                            },
+                            "frame": {
+                              "type": "object",
+                              "properties": {
+                                "name": {
+                                  "type": "string"
+                                },
+                                "url_path": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "name",
+                                "url_path"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": [
+                            "role",
+                            "name",
+                            "exact"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "required_matches": {
+                    "type": "number",
+                    "const": 1
+                  }
+                },
+                "required": [
+                  "kind",
+                  "role",
+                  "name",
+                  "exact",
+                  "scope",
+                  "required_matches"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "const": "visual"
+                  },
+                  "asset_id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "sha256": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  },
+                  "matcher": {
+                    "type": "string",
+                    "const": "rgb-template-v1"
+                  },
+                  "threshold": {
+                    "type": "number",
+                    "minimum": 0.95,
+                    "maximum": 1
+                  },
+                  "required_matches": {
+                    "type": "number",
+                    "const": 1
+                  },
+                  "relative_point": {
+                    "type": "object",
+                    "properties": {
+                      "u": {
+                        "type": "number",
+                        "minimum": 0,
+                        "exclusiveMaximum": 1
+                      },
+                      "v": {
+                        "type": "number",
+                        "minimum": 0,
+                        "exclusiveMaximum": 1
+                      }
+                    },
+                    "required": [
+                      "u",
+                      "v"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "capture_context": {
+                    "type": "object",
+                    "properties": {
+                      "viewport_width": {
+                        "type": "number",
+                        "const": 1280
+                      },
+                      "viewport_height": {
+                        "type": "number",
+                        "const": 800
+                      },
+                      "device_scale_factor": {
+                        "type": "number",
+                        "const": 1
+                      },
+                      "image_scale": {
+                        "type": "string",
+                        "const": "css"
+                      },
+                      "color_space": {
+                        "type": "string",
+                        "const": "srgb"
+                      }
+                    },
+                    "required": [
+                      "viewport_width",
+                      "viewport_height",
+                      "device_scale_factor",
+                      "image_scale",
+                      "color_space"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "kind",
+                  "asset_id",
+                  "sha256",
+                  "matcher",
+                  "threshold",
+                  "required_matches",
+                  "relative_point",
+                  "capture_context"
+                ],
+                "additionalProperties": false
+              }
+            ]
+          },
+          "pre_checks": {
+            "default": [],
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/__schema2"
+            }
+          },
+          "post_checks": {
+            "default": [],
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/__schema2"
+            }
+          },
+          "recoveries": {
+            "default": [],
+            "type": "array",
+            "items": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "recovery_id": {
+                      "type": "string"
+                    },
+                    "on_check_id": {
+                      "type": "string"
+                    },
+                    "kind": {
+                      "type": "string",
+                      "const": "wait"
+                    },
+                    "max_attempts": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 2
+                    },
+                    "delay_ms": {
+                      "type": "number",
+                      "const": 500
+                    }
+                  },
+                  "required": [
+                    "recovery_id",
+                    "on_check_id",
+                    "kind",
+                    "max_attempts",
+                    "delay_ms"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "recovery_id": {
+                      "type": "string"
+                    },
+                    "on_check_id": {
+                      "type": "string"
+                    },
+                    "kind": {
+                      "type": "string",
+                      "const": "saved_action"
+                    },
+                    "max_attempts": {
+                      "type": "number",
+                      "const": 1
+                    },
+                    "step": {
+                      "type": "object",
+                      "properties": {
+                        "step_id": {
+                          "type": "string",
+                          "pattern": "^[A-Za-z0-9_]+$"
+                        },
+                        "tool": {
+                          "type": "string",
+                          "enum": [
+                            "observe_ui",
+                            "navigate",
+                            "click",
+                            "type_text",
+                            "press_key",
+                            "scroll",
+                            "select_option",
+                            "wait_for",
+                            "check_ui",
+                            "extract_data"
+                          ]
+                        },
+                        "arguments": {
+                          "type": "object",
+                          "propertyNames": {
+                            "type": "string"
+                          },
+                          "additionalProperties": {
+                            "$ref": "#/$defs/__schema3"
+                          }
+                        },
+                        "target": {
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "const": "semantic"
+                                },
+                                "role": {
+                                  "type": "string",
+                                  "minLength": 1
+                                },
+                                "name": {
+                                  "$ref": "#/$defs/__schema0"
+                                },
+                                "exact": {
+                                  "type": "boolean",
+                                  "const": true
+                                },
+                                "scope": {
+                                  "anyOf": [
+                                    {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "object",
+                                        "properties": {
+                                          "role": {
+                                            "type": "string",
+                                            "minLength": 1
+                                          },
+                                          "name": {
+                                            "type": "string"
+                                          },
+                                          "exact": {
+                                            "type": "boolean",
+                                            "const": true
+                                          },
+                                          "frame": {
+                                            "type": "object",
+                                            "properties": {
+                                              "name": {
+                                                "type": "string"
+                                              },
+                                              "url_path": {
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "name",
+                                              "url_path"
+                                            ],
+                                            "additionalProperties": false
+                                          }
+                                        },
+                                        "required": [
+                                          "role",
+                                          "name",
+                                          "exact"
+                                        ],
+                                        "additionalProperties": false
+                                      }
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "required_matches": {
+                                  "type": "number",
+                                  "const": 1
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "role",
+                                "name",
+                                "exact",
+                                "scope",
+                                "required_matches"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "const": "visual"
+                                },
+                                "asset_id": {
+                                  "type": "string",
+                                  "minLength": 1
+                                },
+                                "sha256": {
+                                  "type": "string",
+                                  "pattern": "^[a-f0-9]{64}$"
+                                },
+                                "matcher": {
+                                  "type": "string",
+                                  "const": "rgb-template-v1"
+                                },
+                                "threshold": {
+                                  "type": "number",
+                                  "minimum": 0.95,
+                                  "maximum": 1
+                                },
+                                "required_matches": {
+                                  "type": "number",
+                                  "const": 1
+                                },
+                                "relative_point": {
+                                  "type": "object",
+                                  "properties": {
+                                    "u": {
+                                      "type": "number",
+                                      "minimum": 0,
+                                      "exclusiveMaximum": 1
+                                    },
+                                    "v": {
+                                      "type": "number",
+                                      "minimum": 0,
+                                      "exclusiveMaximum": 1
+                                    }
+                                  },
+                                  "required": [
+                                    "u",
+                                    "v"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                "capture_context": {
+                                  "type": "object",
+                                  "properties": {
+                                    "viewport_width": {
+                                      "type": "number",
+                                      "const": 1280
+                                    },
+                                    "viewport_height": {
+                                      "type": "number",
+                                      "const": 800
+                                    },
+                                    "device_scale_factor": {
+                                      "type": "number",
+                                      "const": 1
+                                    },
+                                    "image_scale": {
+                                      "type": "string",
+                                      "const": "css"
+                                    },
+                                    "color_space": {
+                                      "type": "string",
+                                      "const": "srgb"
+                                    }
+                                  },
+                                  "required": [
+                                    "viewport_width",
+                                    "viewport_height",
+                                    "device_scale_factor",
+                                    "image_scale",
+                                    "color_space"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "asset_id",
+                                "sha256",
+                                "matcher",
+                                "threshold",
+                                "required_matches",
+                                "relative_point",
+                                "capture_context"
+                              ],
+                              "additionalProperties": false
+                            }
+                          ]
+                        },
+                        "pre_checks": {
+                          "default": [],
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/$defs/__schema2"
+                          }
+                        },
+                        "post_checks": {
+                          "default": [],
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/$defs/__schema2"
+                          }
+                        }
+                      },
+                      "required": [
+                        "step_id",
+                        "tool",
+                        "arguments",
+                        "pre_checks",
+                        "post_checks"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "then_checks": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/$defs/__schema2"
+                      }
+                    }
+                  },
+                  "required": [
+                    "recovery_id",
+                    "on_check_id",
+                    "kind",
+                    "max_attempts",
+                    "step",
+                    "then_checks"
+                  ],
+                  "additionalProperties": false
+                }
+              ]
+            }
+          }
+        },
+        "required": [
+          "step_id",
+          "tool",
+          "arguments",
+          "pre_checks",
+          "post_checks",
+          "recoveries"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "success_checks": {
+      "minItems": 1,
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/__schema2"
+      }
+    },
+    "business_outcomes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "minLength": 1
+          },
+          "message": {
+            "type": "string"
+          },
+          "after_step_id": {
+            "type": "string"
+          },
+          "checks": {
+            "minItems": 1,
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/__schema2"
+            }
+          },
+          "output_mapping": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {
+              "$ref": "#/$defs/__schema0"
+            }
+          }
+        },
+        "required": [
+          "code",
+          "message",
+          "after_step_id",
+          "checks",
+          "output_mapping"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "output_mapping": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/__schema0"
+      }
+    }
+  },
+  "required": [
+    "surface",
+    "compatibility",
+    "input_schema",
+    "output_schema",
+    "entry",
+    "steps",
+    "success_checks",
+    "business_outcomes",
+    "output_mapping"
+  ],
+  "additionalProperties": false,
+  "$defs": {
+    "__schema0": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "literal"
+            },
+            "value": {
+              "$ref": "#/$defs/__schema1"
+            }
+          },
+          "required": [
+            "kind",
+            "value"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "input"
+            },
+            "path": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "path"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "step_output"
+            },
+            "step_id": {
+              "type": "string"
+            },
+            "path": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "step_id",
+            "path"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "environment"
+            },
+            "path": {
+              "type": "string",
+              "const": "base_url"
+            }
+          },
+          "required": [
+            "kind",
+            "path"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "url"
+            },
+            "base": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "const": "environment"
+                },
+                "path": {
+                  "type": "string",
+                  "const": "base_url"
+                }
+              },
+              "required": [
+                "kind",
+                "path"
+              ],
+              "additionalProperties": false
+            },
+            "path": {
+              "type": "string",
+              "pattern": "^\\/.*"
+            }
+          },
+          "required": [
+            "kind",
+            "base",
+            "path"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "template"
+            },
+            "parts": {
+              "minItems": 1,
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/__schema0"
+              }
+            }
+          },
+          "required": [
+            "kind",
+            "parts"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "__schema1": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        },
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/__schema1"
+          }
+        },
+        {
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/__schema1"
+          }
+        }
+      ]
+    },
+    "__schema2": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "check_id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "kind": {
+              "type": "string",
+              "enum": [
+                "all",
+                "any"
+              ]
+            },
+            "checks": {
+              "minItems": 1,
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/__schema2"
+              }
+            }
+          },
+          "required": [
+            "check_id",
+            "kind",
+            "checks"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "check_id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "kind": {
+              "type": "string",
+              "enum": [
+                "tool_status_equals",
+                "tool_verification"
+              ]
+            },
+            "step_id": {
+              "type": "string"
+            },
+            "expected": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "check_id",
+            "kind",
+            "expected"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "check_id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "kind": {
+              "type": "string",
+              "const": "field_equals"
+            },
+            "actual": {
+              "$ref": "#/$defs/__schema0"
+            },
+            "expected": {
+              "$ref": "#/$defs/__schema0"
+            }
+          },
+          "required": [
+            "check_id",
+            "kind",
+            "actual",
+            "expected"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "check_id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "kind": {
+              "type": "string",
+              "enum": [
+                "control_visible",
+                "control_absent",
+                "control_text_equals",
+                "control_value_equals"
+              ]
+            },
+            "target": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "type": "string",
+                      "const": "semantic"
+                    },
+                    "role": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "name": {
+                      "$ref": "#/$defs/__schema0"
+                    },
+                    "exact": {
+                      "type": "boolean",
+                      "const": true
+                    },
+                    "scope": {
+                      "anyOf": [
+                        {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "role": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "name": {
+                                "type": "string"
+                              },
+                              "exact": {
+                                "type": "boolean",
+                                "const": true
+                              },
+                              "frame": {
+                                "type": "object",
+                                "properties": {
+                                  "name": {
+                                    "type": "string"
+                                  },
+                                  "url_path": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "name",
+                                  "url_path"
+                                ],
+                                "additionalProperties": false
+                              }
+                            },
+                            "required": [
+                              "role",
+                              "name",
+                              "exact"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "required_matches": {
+                      "type": "number",
+                      "const": 1
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "role",
+                    "name",
+                    "exact",
+                    "scope",
+                    "required_matches"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "type": "string",
+                      "const": "visual"
+                    },
+                    "asset_id": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "sha256": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$"
+                    },
+                    "matcher": {
+                      "type": "string",
+                      "const": "rgb-template-v1"
+                    },
+                    "threshold": {
+                      "type": "number",
+                      "minimum": 0.95,
+                      "maximum": 1
+                    },
+                    "required_matches": {
+                      "type": "number",
+                      "const": 1
+                    },
+                    "relative_point": {
+                      "type": "object",
+                      "properties": {
+                        "u": {
+                          "type": "number",
+                          "minimum": 0,
+                          "exclusiveMaximum": 1
+                        },
+                        "v": {
+                          "type": "number",
+                          "minimum": 0,
+                          "exclusiveMaximum": 1
+                        }
+                      },
+                      "required": [
+                        "u",
+                        "v"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "capture_context": {
+                      "type": "object",
+                      "properties": {
+                        "viewport_width": {
+                          "type": "number",
+                          "const": 1280
+                        },
+                        "viewport_height": {
+                          "type": "number",
+                          "const": 800
+                        },
+                        "device_scale_factor": {
+                          "type": "number",
+                          "const": 1
+                        },
+                        "image_scale": {
+                          "type": "string",
+                          "const": "css"
+                        },
+                        "color_space": {
+                          "type": "string",
+                          "const": "srgb"
+                        }
+                      },
+                      "required": [
+                        "viewport_width",
+                        "viewport_height",
+                        "device_scale_factor",
+                        "image_scale",
+                        "color_space"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "asset_id",
+                    "sha256",
+                    "matcher",
+                    "threshold",
+                    "required_matches",
+                    "relative_point",
+                    "capture_context"
+                  ],
+                  "additionalProperties": false
+                }
+              ]
+            },
+            "expected": {
+              "$ref": "#/$defs/__schema0"
+            }
+          },
+          "required": [
+            "check_id",
+            "kind",
+            "target"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "__schema3": {
+      "anyOf": [
+        {
+          "oneOf": [
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "const": "semantic"
+                },
+                "role": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "name": {
+                  "$ref": "#/$defs/__schema0"
+                },
+                "exact": {
+                  "type": "boolean",
+                  "const": true
+                },
+                "scope": {
+                  "anyOf": [
+                    {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "role": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "exact": {
+                            "type": "boolean",
+                            "const": true
+                          },
+                          "frame": {
+                            "type": "object",
+                            "properties": {
+                              "name": {
+                                "type": "string"
+                              },
+                              "url_path": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "name",
+                              "url_path"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "required": [
+                          "role",
+                          "name",
+                          "exact"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "required_matches": {
+                  "type": "number",
+                  "const": 1
+                }
+              },
+              "required": [
+                "kind",
+                "role",
+                "name",
+                "exact",
+                "scope",
+                "required_matches"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "const": "visual"
+                },
+                "asset_id": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "sha256": {
+                  "type": "string",
+                  "pattern": "^[a-f0-9]{64}$"
+                },
+                "matcher": {
+                  "type": "string",
+                  "const": "rgb-template-v1"
+                },
+                "threshold": {
+                  "type": "number",
+                  "minimum": 0.95,
+                  "maximum": 1
+                },
+                "required_matches": {
+                  "type": "number",
+                  "const": 1
+                },
+                "relative_point": {
+                  "type": "object",
+                  "properties": {
+                    "u": {
+                      "type": "number",
+                      "minimum": 0,
+                      "exclusiveMaximum": 1
+                    },
+                    "v": {
+                      "type": "number",
+                      "minimum": 0,
+                      "exclusiveMaximum": 1
+                    }
+                  },
+                  "required": [
+                    "u",
+                    "v"
+                  ],
+                  "additionalProperties": false
+                },
+                "capture_context": {
+                  "type": "object",
+                  "properties": {
+                    "viewport_width": {
+                      "type": "number",
+                      "const": 1280
+                    },
+                    "viewport_height": {
+                      "type": "number",
+                      "const": 800
+                    },
+                    "device_scale_factor": {
+                      "type": "number",
+                      "const": 1
+                    },
+                    "image_scale": {
+                      "type": "string",
+                      "const": "css"
+                    },
+                    "color_space": {
+                      "type": "string",
+                      "const": "srgb"
+                    }
+                  },
+                  "required": [
+                    "viewport_width",
+                    "viewport_height",
+                    "device_scale_factor",
+                    "image_scale",
+                    "color_space"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "required": [
+                "kind",
+                "asset_id",
+                "sha256",
+                "matcher",
+                "threshold",
+                "required_matches",
+                "relative_point",
+                "capture_context"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        },
+        {
+          "$ref": "#/$defs/__schema0"
+        },
+        {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "boolean"
+            }
+          ]
+        },
+        {
+          "type": "null"
+        },
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/__schema3"
+          }
+        },
+        {
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/__schema3"
+          }
+        }
+      ]
+    }
+  }
+}
