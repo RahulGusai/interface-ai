@@ -48,6 +48,7 @@ def bundle(repo, tmp_path, dep=None, selection=None):
     )
     worker = Worker(repo, Settings(repo_root=tmp_path, _env_file=None), None, None)
     lifecycle = Lifecycle(repo, worker, None)
+    worker.lifecycle = lifecycle
     artifact = asyncio.run(
         lifecycle.prepare_draft(source["run_id"], proposal(selection))
     )
@@ -184,3 +185,17 @@ def test_rollback_after_capability_insert_and_reuse_schema_drift(
     repo.transition(new["run_id"], "awaiting_finalization")
     with pytest.raises(ValueError, match="SCHEMA_DRIFT"):
         asyncio.run(life.prepare_draft(new["run_id"], bad))
+
+
+def test_validation_cancel_failure_remains_a_readable_source_outcome(repo, tmp_path):
+    from interface_api.dto import RunDTO
+    from interface_api.reads import Reads
+
+    life, source, artifact, validation = bundle(repo, tmp_path)
+    life.validation_failed(
+        artifact,
+        validation["run_id"],
+        {"stop_reason": {"code": "USER_CANCELLED", "dispatch_state": "not_dispatched"}},
+    )
+    stopped = repo.get("runs", "run_id", source["run_id"])
+    RunDTO.model_validate(Reads(repo).run(stopped))

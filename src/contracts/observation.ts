@@ -24,6 +24,7 @@ export const controlSchema = z.strictObject({
     expanded: z.boolean().optional(),
   }),
   value: z.string().optional(),
+  text: z.string().optional(),
   ancestry: z
     .array(
       z.strictObject({

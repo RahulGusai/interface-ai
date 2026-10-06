@@ -1,3 +1,4 @@
+import { evaluateCheck } from "../../src/replay/checks.js";
 import { it, expect } from "vitest";
 import { readFile } from "node:fs/promises";
 import { createBrowserFactory } from "../../src/adapters/factory.js";
@@ -8,7 +9,7 @@ import { runReplay } from "../../src/replay/run-replay.js";
 it("resolves only the named scoped duplicate from fresh captured ancestry", async () => {
   const fixture = await startFixture(
     undefined,
-    '<section aria-label="Primary"><button>Search</button></section><section aria-label="Secondary"><button>Search</button></section>',
+    '<section aria-label="Primary"><button>Search</button></section><section aria-label="Secondary"><button>Search</button></section><span aria-label="Status">Active</span>',
   );
   const adapter = await createBrowserFactory({ headless: true }).createForTask(
     { goal: "test", targetUrl: fixture.url },
@@ -43,6 +44,24 @@ it("resolves only the named scoped duplicate from fresh captured ancestry", asyn
     expect(
       resolveTarget(scoped, capture, new Map(), context).target?.kind,
     ).toBe("control");
+    const textCheck = evaluateCheck(
+      {
+        check_id: "rendered_status",
+        kind: "control_text_equals",
+        target: {
+          kind: "semantic",
+          role: "text",
+          name: { kind: "literal", value: "Status" },
+          exact: true,
+          scope: null,
+          required_matches: 1,
+        },
+        expected: { kind: "literal", value: "Active" },
+      },
+      capture,
+      context,
+    );
+    expect(textCheck.verdict).toBe("pass");
   } finally {
     await adapter.close();
     await fixture.close();

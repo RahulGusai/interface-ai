@@ -464,40 +464,52 @@ class Lifecycle:
         )
         return run
 
-    def validation_failed(self, artifact, validation_id, result):
-        with self.repo.db.transaction() as c:
-            c.execute(
-                "UPDATE artifacts SET state='validation_failed' WHERE artifact_id=? AND state!='published'",
-                (artifact["artifact_id"],),
+    def validation_failed(self, artifact, validation_id, result, conn=None):
+        if conn is None:
+            with self.repo.db.transaction() as c:
+                return self.validation_failed(artifact, validation_id, result, c)
+        c = conn
+        c.execute(
+            "UPDATE artifacts SET state='validation_failed' WHERE artifact_id=? AND state!='published'",
+            (artifact["artifact_id"],),
+        )
+        source = self.repo.get("runs", "run_id", artifact["source_run_id"], c)
+        if source["status"] == "validating":
+            self.repo.transition(
+                source["run_id"],
+                "failed",
+                {
+                    "outcome": {
+                        **outcome(
+                            "hard_failure",
+                            "VALIDATION_REPLAY_FAILED",
+                            "Validation stopped before verified success",
+                            stage="finalization",
+                            dispatch=(result.get("stop_reason") or {}).get(
+                                "dispatch_state", "uncertain"
+                            ),
+                        ),
+                        **result.get("outcome", {}),
+                        "kind": "hard_failure",
+                        "code": "VALIDATION_REPLAY_FAILED",
+                        "failure_stage": "finalization",
+                    },
+                    "validation_run_id": validation_id,
+                },
+                conn=c,
             )
-            source = self.repo.get("runs", "run_id", artifact["source_run_id"], c)
-            if source["status"] == "validating":
-                self.repo.transition(
-                    source["run_id"],
-                    "failed",
-                    {
-                        "outcome": {
-                            **result.get("outcome", {}),
-                            "kind": "hard_failure",
-                            "code": "VALIDATION_REPLAY_FAILED",
-                            "failure_stage": "finalization",
-                        },
-                        "validation_run_id": validation_id,
-                    },
-                    conn=c,
-                )
-            elif source["status"] == "cancelling":
-                self.repo.transition(
-                    source["run_id"],
-                    "cancelled",
-                    {
-                        "stop_reason": {
-                            "code": "USER_CANCELLED",
-                            "dispatch_state": "uncertain",
-                        }
-                    },
-                    conn=c,
-                )
+        elif source["status"] == "cancelling":
+            self.repo.transition(
+                source["run_id"],
+                "cancelled",
+                {
+                    "stop_reason": {
+                        "code": "USER_CANCELLED",
+                        "dispatch_state": "uncertain",
+                    }
+                },
+                conn=c,
+            )
 
     def publish_validated(self, source_id, artifact_id, validation_id):
         with self.repo.db.transaction() as c:

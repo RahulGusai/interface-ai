@@ -1,0 +1,10 @@
+[
+  { "value": "demo@example.test", "valid": true },
+  { "value": "member+tag@example.test", "valid": true },
+  { "value": "a@b", "valid": false },
+  { "value": "a b@example.test", "valid": false },
+  { "value": "a@@example.test", "valid": false },
+  { "value": 42, "valid": false },
+  { "value": false, "valid": false },
+  { "value": "", "valid": false }
+]

@@ -5,6 +5,16 @@ import re
 
 from jsonschema import Draft202012Validator, FormatChecker
 
+FORMATS = FormatChecker()
+
+
+@FORMATS.checks("email")
+def email_format(value):
+    return not isinstance(value, str) or bool(
+        re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", value)
+    )
+
+
 TOOLS = {
     "observe_ui",
     "navigate",
@@ -85,7 +95,7 @@ def validate_schema(schema):
     Draft202012Validator.check_schema(schema)
     for field in props.values():
         if "default" in field:
-            Draft202012Validator(field, format_checker=FormatChecker()).validate(
+            Draft202012Validator(field, format_checker=FORMATS).validate(
                 field["default"]
             )
 
@@ -99,7 +109,7 @@ def validate_inputs(schema, values):
         if name not in result and "default" in field:
             result[name] = copy.deepcopy(field["default"])
     errors = list(
-        Draft202012Validator(schema, format_checker=FormatChecker()).iter_errors(result)
+        Draft202012Validator(schema, format_checker=FORMATS).iter_errors(result)
     )
     if errors:
         raise ValueError("INPUT_CONTRACT_INVALID")
@@ -121,8 +131,11 @@ def validate_definition(definition):
     validate_schema(definition["output_schema"])
     seen = set()
     checks = set()
+    available_after = {}
 
     def walk(value, allowed):
+        if isinstance(value, str) and re.match(r"https?://", value, re.I):
+            raise ValueError("Tenant URL literal forbidden")
         if isinstance(value, list):
             for item in value:
                 walk(item, allowed)
@@ -163,6 +176,11 @@ def validate_definition(definition):
     walk(definition["entry"], seen)
 
     def step(s):
+        if s["tool"] == "navigate" and (
+            not isinstance(s["arguments"].get("url"), dict)
+            or s["arguments"]["url"].get("kind") not in ("environment", "url")
+        ):
+            raise ValueError("Untrusted navigation URL")
         if s["step_id"] in seen:
             raise ValueError("Duplicate step")
         walk(s["arguments"], seen)
@@ -182,6 +200,7 @@ def validate_definition(definition):
             if recovery["kind"] == "saved_action":
                 step(recovery["step"])
                 walk(recovery["then_checks"], seen)
+        available_after[s["step_id"]] = set(seen)
     walk(definition["success_checks"], seen)
     walk(definition["output_mapping"], seen)
     if set(definition["output_mapping"]) != set(
@@ -189,8 +208,8 @@ def validate_definition(definition):
     ):
         raise ValueError("Output mapping must cover declared outputs")
     for outcome in definition["business_outcomes"]:
-        if outcome["after_step_id"] not in seen:
+        if outcome["after_step_id"] not in available_after:
             raise ValueError("Invalid business outcome position")
-        walk(outcome, seen)
+        walk(outcome, available_after[outcome["after_step_id"]])
     canonical(definition)
     return definition

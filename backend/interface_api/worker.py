@@ -57,7 +57,7 @@ class Worker:
             ident = await self.queue.get()
             try:
                 row = await asyncio.to_thread(self.repo.get, "runs", "run_id", ident)
-                if row["status"] == "queued":
+                if row["status"] == "queued" and self.accepting:
                     self.active = ident
                     self.cancel_signal = asyncio.Event()
                     if self.lifecycle:
@@ -110,6 +110,35 @@ class Worker:
         )
 
     async def execute_raw(self, ident):
+        current = await asyncio.to_thread(self.repo.get, "runs", "run_id", ident)
+        if current["status"] != "queued":
+            return None
+        if not self.accepting:
+            await asyncio.to_thread(
+                self.repo.transition,
+                ident,
+                "interrupted",
+                {
+                    "stop_reason": {
+                        "code": "SERVICE_SHUTDOWN",
+                        "dispatch_state": "not_dispatched",
+                    }
+                },
+            )
+            return None
+        if self.cancel_signal and self.cancel_signal.is_set():
+            await asyncio.to_thread(
+                self.repo.transition,
+                ident,
+                "cancelled",
+                {
+                    "stop_reason": {
+                        "code": "USER_CANCELLED",
+                        "dispatch_state": "not_dispatched",
+                    }
+                },
+            )
+            return None
         row = await asyncio.to_thread(self.repo.transition, ident, "running")
         staging = self.settings.database_path.parent / "staging" / ident
         staging.mkdir(parents=True, exist_ok=True, mode=0o700)
@@ -228,8 +257,21 @@ class Worker:
         def mark():
             with self.repo.db.transaction() as c:
                 row = self.repo.get("runs", "run_id", ident, c)
+                active = (
+                    self.repo.get("runs", "run_id", self.active, c)
+                    if self.active
+                    else None
+                )
+                affects_active = bool(
+                    active
+                    and (
+                        active["run_id"] == ident
+                        or active.get("parent_run_id") == ident
+                        or row.get("parent_run_id") == active["run_id"]
+                    )
+                )
                 if row["status"] in ("cancelled", "cancelling"):
-                    return row
+                    return row, affects_active
                 if row["status"] in TERMINAL:
                     from .errors import ApiError
 
@@ -237,40 +279,80 @@ class Worker:
                         409, "RUN_NOT_CANCELLABLE", "Run is already terminal"
                     )
                 status = "cancelled" if row["status"] == "queued" else "cancelling"
-                result = (
-                    {
-                        "stop_reason": {
-                            "code": "USER_CANCELLED",
-                            "dispatch_state": "not_dispatched",
-                        }
+                reason = {
+                    "stop_reason": {
+                        "code": "USER_CANCELLED",
+                        "dispatch_state": "not_dispatched",
                     }
-                    if status == "cancelled"
-                    else None
+                }
+                self.repo.transition(
+                    ident, status, reason if status == "cancelled" else None, conn=c
                 )
-                self.repo.transition(ident, status, result, conn=c)
                 children = self.repo.rows(
                     "runs",
-                    "parent_run_id=? AND status IN ('queued','running')",
+                    "parent_run_id=? AND status IN ('queued','running','cancelling')",
                     (ident,),
                     conn=c,
                 )
                 for child in children:
-                    self.repo.transition(
-                        child["run_id"],
-                        "cancelled" if child["status"] == "queued" else "cancelling",
-                        conn=c,
+                    if child["status"] in ("queued", "running"):
+                        self.repo.transition(
+                            child["run_id"],
+                            "cancelled"
+                            if child["status"] == "queued"
+                            else "cancelling",
+                            reason if child["status"] == "queued" else None,
+                            conn=c,
+                        )
+                # Queued validation tombstones have no child execution to settle their bundle.
+                if children and not any(
+                    child["status"] in ("running", "cancelling") for child in children
+                ):
+                    self.repo.transition(ident, "cancelled", reason, conn=c)
+                    c.execute(
+                        "UPDATE artifacts SET state='validation_failed' WHERE source_run_id=? AND state!='published'",
+                        (ident,),
                     )
-                return self.repo.get("runs", "run_id", ident, c)
+                if (
+                    row["purpose"] == "validation"
+                    and status == "cancelled"
+                    and self.lifecycle
+                ):
+                    artifact = self.repo.get(
+                        "artifacts", "artifact_id", row["pinned_artifact_id"], c
+                    )
+                    if artifact["state"] != "published":
+                        self.lifecycle.validation_failed(
+                            artifact, ident, reason, conn=c
+                        )
+                return self.repo.get("runs", "run_id", ident, c), affects_active
 
-        row = await asyncio.to_thread(mark)
-        if (
-            self.active == ident or row.get("parent_run_id") == self.active
-        ) and self.cancel_signal:
+        row, affects_active = await asyncio.to_thread(mark)
+        if affects_active and self.cancel_signal:
             self.cancel_signal.set()
         return row
 
     async def shutdown(self):
+        # Close admission before yielding; the loop never dispatches another pending ID.
         self.accepting = False
+        async with self.admission:
+
+            def interrupt_pending():
+                with self.repo.db.transaction() as c:
+                    for row in self.repo.rows("runs", "status='queued'", conn=c):
+                        self.repo.transition(
+                            row["run_id"],
+                            "interrupted",
+                            {
+                                "stop_reason": {
+                                    "code": "SERVICE_SHUTDOWN",
+                                    "dispatch_state": "not_dispatched",
+                                }
+                            },
+                            conn=c,
+                        )
+
+            await asyncio.to_thread(interrupt_pending)
         if self.cancel_signal:
             self.cancel_signal.set()
         if self.task:

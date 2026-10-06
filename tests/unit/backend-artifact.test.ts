@@ -110,3 +110,71 @@ describe("durable artifact", () => {
       expect(() => parseArtifact(mutation)).toThrow();
   });
 });
+it("rejects business checks that read a future step", () => {
+  const bad = structuredClone(definition) as any;
+  bad.steps.push({ ...bad.steps[0], step_id: "s2" });
+  bad.business_outcomes = [
+    {
+      code: "early",
+      message: "Early outcome",
+      after_step_id: "s1",
+      checks: [
+        {
+          check_id: "future",
+          kind: "field_equals",
+          actual: {
+            kind: "step_output",
+            step_id: "s2",
+            path: "fields.status.value",
+          },
+          expected: { kind: "literal", value: "Active" },
+        },
+      ],
+      output_mapping: {},
+    },
+  ];
+  expect(() => parseArtifact(bad)).toThrow("FORWARD");
+});
+it("requires trusted URL bindings for every saved navigation", () => {
+  const bad = structuredClone(definition) as any;
+  bad.steps[0] = {
+    step_id: "s1",
+    tool: "navigate",
+    arguments: { url: "http://tenant.example/members" },
+    pre_checks: [],
+    post_checks: [],
+    recoveries: [],
+  };
+  expect(() => parseArtifact(bad)).toThrow();
+});
+import { readFileSync } from "node:fs";
+it("uses shared email acceptance and default cases", () => {
+  const cases = JSON.parse(
+    readFileSync(
+      new URL("../../contracts/value-validation-cases.json", import.meta.url),
+      "utf8",
+    ),
+  );
+  const schema = {
+    type: "object",
+    properties: { email: { type: "string", format: "email" } },
+    required: ["email"],
+    additionalProperties: false,
+  };
+  for (const c of cases) {
+    if (c.valid) {
+      expect(validateValues(schema, { email: c.value }).email).toBe(c.value);
+      expect(
+        validateValues(
+          {
+            ...schema,
+            properties: {
+              email: { ...schema.properties.email, default: c.value },
+            },
+          },
+          {},
+        ).email,
+      ).toBe(c.value);
+    } else expect(() => validateValues(schema, { email: c.value })).toThrow();
+  }
+});

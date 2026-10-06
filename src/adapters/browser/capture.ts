@@ -21,6 +21,7 @@ export async function readSemantics(
       return {
         role: "option",
         name: e.label,
+        text: e.label,
         state: {
           enabled:
             !select.disabled &&
@@ -130,6 +131,7 @@ export async function readSemantics(
       role,
       name,
       state,
+      text: (e as HTMLElement).innerText?.replace(/\r\n?/g, "\n"),
       ancestry,
       ...("value" in e && input.type !== "password"
         ? { value: String(input.value) }

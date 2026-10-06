@@ -87,7 +87,7 @@ export function evaluateCheck(
         } else {
           observed =
             check.kind === "control_text_equals"
-              ? matches[0]!.name
+              ? matches[0]!.text
               : matches[0]!.value;
           expected = resolveBindings(
             check.expected,

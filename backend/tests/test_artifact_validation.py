@@ -85,3 +85,94 @@ def test_artifact_rejects_transient_ids_and_forward_bindings():
     }
     with pytest.raises(ValueError, match="Forward"):
         validate_definition(forward)
+
+
+def test_email_and_business_refs_match_runtime_contract():
+    import copy
+
+    from test_publication import DEFINITION
+
+    from interface_api.artifact_validation import validate_definition, validate_inputs
+
+    for email in ("a@b", "a b@example.test"):
+        with pytest.raises(ValueError):
+            validate_inputs(DEFINITION["input_schema"], {"email": email})
+    bad = copy.deepcopy(DEFINITION)
+    bad["business_outcomes"][0]["checks"] = [
+        {
+            "check_id": "future",
+            "kind": "field_equals",
+            "actual": {
+                "kind": "step_output",
+                "step_id": "s004",
+                "path": "fields.status.value",
+            },
+            "expected": {"kind": "literal", "value": "Active"},
+        }
+    ]
+    with pytest.raises(ValueError, match="Forward"):
+        validate_definition(bad)
+
+
+def test_navigation_requires_trusted_url_binding():
+    import copy
+
+    from test_publication import DEFINITION
+
+    from interface_api.artifact_validation import validate_definition
+
+    bad = copy.deepcopy(DEFINITION)
+    bad["steps"][0] = {
+        "step_id": "s001",
+        "tool": "navigate",
+        "arguments": {"url": "http://tenant.example/members"},
+        "pre_checks": [],
+        "post_checks": [],
+        "recoveries": [],
+    }
+    with pytest.raises(ValueError):
+        validate_definition(bad)
+
+
+def test_shared_email_acceptance_cases_and_defaults():
+    import json
+    from pathlib import Path
+
+    from interface_api.artifact_validation import validate_inputs
+
+    cases = json.loads(
+        (
+            Path(__file__).resolve().parents[2]
+            / "contracts/value-validation-cases.json"
+        ).read_text()
+    )
+    schema = {
+        "type": "object",
+        "properties": {"email": {"type": "string", "format": "email"}},
+        "required": ["email"],
+        "additionalProperties": False,
+    }
+    for case in cases:
+        if case["valid"]:
+            assert (
+                validate_inputs(schema, {"email": case["value"]})["email"]
+                == case["value"]
+            )
+            assert (
+                validate_inputs(
+                    {
+                        **schema,
+                        "properties": {
+                            "email": {
+                                **schema["properties"]["email"],
+                                "default": case["value"],
+                            }
+                        },
+                    },
+                    {},
+                )["email"]
+                == case["value"]
+            )
+        else:
+            with pytest.raises(ValueError):
+                validate_inputs(schema, {"email": case["value"]})

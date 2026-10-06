@@ -243,6 +243,7 @@ export const artifactSchema = z.strictObject({
 export type ArtifactDefinition = z.infer<typeof artifactSchema>;
 export function parseArtifact(raw: unknown): ArtifactDefinition {
   const a = artifactSchema.parse(raw);
+  const availableAfter = new Map<string, Set<string>>();
   const seen = new Set<string>(),
     checks = new Set<string>();
   const walk = (v: any, available: Set<string>) => {
@@ -250,6 +251,8 @@ export function parseArtifact(raw: unknown): ArtifactDefinition {
       for (const x of v) walk(x, available);
       return;
     }
+    if (typeof v === "string" && /^https?:\/\//i.test(v))
+      throw Error("ABSOLUTE_URL");
     if (!v || typeof v !== "object") return;
     for (const k of Object.keys(v))
       if (
@@ -284,7 +287,16 @@ export function parseArtifact(raw: unknown): ArtifactDefinition {
   if (!["environment", "url"].includes(a.entry.url.kind))
     throw Error("UNTRUSTED_ENTRY");
   walk(a.entry, seen);
+  const trustedNavigation = (s: any) => {
+    if (
+      s.tool === "navigate" &&
+      (!s.arguments.url ||
+        !["environment", "url"].includes(s.arguments.url.kind))
+    )
+      throw Error("UNTRUSTED_NAVIGATION");
+  };
   for (const s of a.steps) {
+    trustedNavigation(s);
     if (seen.has(s.step_id)) throw Error("DUPLICATE_STEP");
     walk(s.arguments, seen);
     walk(s.target, seen);
@@ -299,6 +311,7 @@ export function parseArtifact(raw: unknown): ArtifactDefinition {
       )
         throw Error("UNKNOWN_RECOVERY_CHECK");
       if (r.kind === "saved_action") {
+        trustedNavigation(r.step);
         if (seen.has(r.step.step_id)) throw Error("DUPLICATE_STEP");
         walk(r.step.arguments, seen);
         walk(r.step.target, seen);
@@ -308,12 +321,15 @@ export function parseArtifact(raw: unknown): ArtifactDefinition {
         walk(r.then_checks, seen);
       }
     }
+    availableAfter.set(s.step_id, new Set(seen));
   }
   walk(a.success_checks, seen);
-  walk(a.business_outcomes, seen);
   walk(a.output_mapping, seen);
-  for (const b of a.business_outcomes)
-    if (!seen.has(b.after_step_id)) throw Error("UNKNOWN_BUSINESS_STEP");
+  for (const b of a.business_outcomes) {
+    const available = availableAfter.get(b.after_step_id);
+    if (!available) throw Error("UNKNOWN_BUSINESS_STEP");
+    walk(b, available);
+  }
   if (
     Object.keys(a.output_mapping).sort().join() !==
     Object.keys(a.output_schema.properties).sort().join()

@@ -61,3 +61,134 @@ async def test_serial_worker_and_queued_cancellation(repo, tmp_path):
     assert maximum == 1 and finished == [a["run_id"], b["run_id"]]
     assert repo.get("runs", "run_id", tombstone["run_id"])["status"] == "cancelled"
     await worker.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_shutdown_interrupts_pending_jobs_without_dispatch(repo, tmp_path):
+    worker = Worker(
+        repo, Settings(repo_root=tmp_path, _env_file=None), None, NeverRunner()
+    )
+    await worker.start()
+    dispatched = []
+
+    class MustNotRun:
+        async def execute(self, ident):
+            dispatched.append(ident)
+
+    worker.lifecycle = MustNotRun()
+    pending = run(repo)
+    worker.queue.put_nowait(pending["run_id"])
+    await worker.shutdown()
+    assert not dispatched
+    stopped = repo.get("runs", "run_id", pending["run_id"])
+    assert (
+        stopped["status"] == "interrupted"
+        and stopped["result"]["stop_reason"]["code"] == "SERVICE_SHUTDOWN"
+    )
+
+
+@pytest.mark.asyncio
+async def test_manual_validation_source_cancel_signals_running_child(repo, tmp_path):
+    from test_publication import bundle
+
+    life, source, artifact, validation = await asyncio.to_thread(bundle, repo, tmp_path)
+    worker = life.worker
+    worker.active = validation["run_id"]
+    worker.cancel_signal = asyncio.Event()
+    # A retry validation is admitted after a failed prior attempt.
+    repo.transition(
+        source["run_id"],
+        "failed",
+        {
+            "outcome": {
+                "kind": "hard_failure",
+                "code": "TEST",
+                "message": "Previous failure",
+            }
+        },
+    )
+    with repo.db.transaction() as c:
+        c.execute(
+            "UPDATE artifacts SET state='validation_failed' WHERE artifact_id=?",
+            (artifact["artifact_id"],),
+        )
+    retry = life.start_validation(
+        artifact["artifact_id"], {"email": "demo@example.test"}
+    )
+    repo.transition(retry["run_id"], "running")
+    worker.active = retry["run_id"]
+    await worker.cancel(source["run_id"])
+    assert worker.cancel_signal.is_set()
+    assert repo.get("runs", "run_id", retry["run_id"])["status"] == "cancelling"
+
+
+@pytest.mark.asyncio
+async def test_queued_validation_cancel_settles_source_and_draft(repo, tmp_path):
+    from test_publication import bundle
+
+    from interface_api.dto import RunDTO
+    from interface_api.reads import Reads
+
+    life, source, artifact, validation = await asyncio.to_thread(bundle, repo, tmp_path)
+    repo.transition(
+        source["run_id"],
+        "failed",
+        {
+            "outcome": {
+                "kind": "hard_failure",
+                "code": "TEST",
+                "message": "Previous failure",
+            }
+        },
+    )
+    with repo.db.transaction() as c:
+        c.execute(
+            "UPDATE artifacts SET state='validation_failed' WHERE artifact_id=?",
+            (artifact["artifact_id"],),
+        )
+    retry = life.start_validation(
+        artifact["artifact_id"], {"email": "demo@example.test"}
+    )
+    await life.worker.cancel(retry["run_id"])
+    stopped = repo.get("runs", "run_id", source["run_id"])
+    assert stopped["status"] in ("failed", "cancelled")
+    assert (
+        repo.get("artifacts", "artifact_id", artifact["artifact_id"])["state"]
+        == "validation_failed"
+    )
+    RunDTO.model_validate(Reads(repo).run(stopped))
+
+
+@pytest.mark.asyncio
+async def test_source_cancel_of_queued_retry_finishes_bundle_immediately(
+    repo, tmp_path
+):
+    from test_publication import bundle
+
+    life, source, artifact, validation = await asyncio.to_thread(bundle, repo, tmp_path)
+    repo.transition(
+        source["run_id"],
+        "failed",
+        {
+            "outcome": {
+                "kind": "hard_failure",
+                "code": "TEST",
+                "message": "Previous failure",
+            }
+        },
+    )
+    with repo.db.transaction() as c:
+        c.execute(
+            "UPDATE artifacts SET state='validation_failed' WHERE artifact_id=?",
+            (artifact["artifact_id"],),
+        )
+    retry = life.start_validation(
+        artifact["artifact_id"], {"email": "demo@example.test"}
+    )
+    await life.worker.cancel(source["run_id"])
+    assert repo.get("runs", "run_id", source["run_id"])["status"] == "cancelled"
+    assert repo.get("runs", "run_id", retry["run_id"])["status"] == "cancelled"
+    assert (
+        repo.get("artifacts", "artifact_id", artifact["artifact_id"])["state"]
+        == "validation_failed"
+    )
