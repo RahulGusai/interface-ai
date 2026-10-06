@@ -1,0 +1,100 @@
+<!doctype html>
+<html>
+  <head>
+    <title>Synthetic member desk</title>
+    <style>
+      body {
+        font: 18px sans-serif;
+        margin: 24px;
+      }
+      button,
+      input,
+      select {
+        font: inherit;
+        margin: 8px;
+      }
+      #visual {
+        position: absolute;
+        left: 650px;
+        top: 50px;
+        width: 160px;
+        height: 60px;
+        background: #ddac42;
+        cursor: pointer;
+      }
+      #region {
+        height: 100px;
+        width: 250px;
+        overflow: auto;
+        border: 2px solid;
+      }
+      #region p {
+        height: 400px;
+      }
+      iframe {
+        height: 100px;
+      }
+      canvas {
+        border: 1px solid;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Member desk — synthetic data</h1>
+    <label>Member ID<input name="member" /></label
+    ><button
+      onclick="
+        document.querySelector('[role=status]').textContent =
+          document.querySelector('input').value === '42'
+            ? 'Member Ada | 123.50'
+            : 'Not found';
+        window.activations = (window.activations || 0) + 1;
+      "
+    >
+      Search
+    </button>
+    <p role="status">Ready</p>
+    <label
+      >Plan<select>
+        <option>Basic</option>
+        <option>Premium</option>
+        <option disabled>Unavailable</option>
+      </select></label
+    >
+    <button onclick="alert('Synthetic notice')">Known dialog</button
+    ><button onclick="confirm('Unknown confirmation')">Unknown dialog</button
+    ><button onclick="window.open('/frame')">Popup</button>
+    <div
+      id="visual"
+      onclick="
+        this.style.background = '#52bb88';
+        this.textContent = 'Selected';
+      "
+    >
+      Visual tile
+    </div>
+    <div id="region" role="region" aria-label="Scrollable panel">
+      <p>Long panel</p>
+      End
+    </div>
+    <button
+      onclick="
+        setTimeout(
+          () =>
+            (document.querySelector('[aria-label=Delayed]').disabled = false),
+          250,
+        )
+      "
+    >
+      Enable later</button
+    ><button aria-label="Delayed" disabled>Delayed</button>
+    <p>123.50</p>
+    <p>$1,234.00</p>
+    <button>Duplicate</button><button>Duplicate</button>
+    <iframe title="Frame" src="/frame"></iframe
+    ><a href="http://127.0.0.1:1/forbidden">Forbidden link</a
+    ><a href="/redirect">Redirect link</a>
+    <label>Secret<input type="password" value="SENSITIVE_MARKER" /></label>
+    <p>SENSITIVE_MARKER</p>
+  </body>
+</html>

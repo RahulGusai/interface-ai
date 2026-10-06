@@ -1,0 +1,179 @@
+{
+  "example_only": true,
+  "schema_version": "capability-artifact/1",
+  "artifact_id": "art_member_lookup_v1",
+  "capability_id": "cap_member_lookup",
+  "version": 1,
+  "name": "Look up a member",
+  "tool_contract_version": "browser-tools/1",
+  "source_discovery_run_id": "run_discovery_001",
+  "created_at": "2026-10-06T04:00:13.000Z",
+  "environment": {
+    "application_id": "synthetic-member-desk",
+    "adapter_kind": "browser",
+    "start_url": "http://127.0.0.1:4300/",
+    "required_policy_profile_id": "synthetic-member-readonly-v1"
+  },
+  "input_schema": {
+    "type": "object",
+    "required": [
+      "member_id"
+    ],
+    "additionalProperties": false,
+    "properties": {
+      "member_id": {
+        "type": "string",
+        "pattern": "^[0-9]+$"
+      }
+    }
+  },
+  "output_schema": {
+    "type": "object",
+    "required": [
+      "member_id",
+      "member_summary"
+    ],
+    "additionalProperties": false,
+    "properties": {
+      "member_id": {
+        "type": "string",
+        "pattern": "^[0-9]+$"
+      },
+      "member_summary": {
+        "type": "string",
+        "pattern": "^Member .+ \\| [0-9]+\\.[0-9]{2}$"
+      }
+    }
+  },
+  "targets": {
+    "page_heading": {
+      "strategy": "semantic",
+      "frame_path": [],
+      "role": "heading",
+      "required_matches": 1,
+      "name": "Member desk — synthetic data",
+      "match": "exact"
+    },
+    "member_id_field": {
+      "strategy": "semantic",
+      "frame_path": [],
+      "role": "textbox",
+      "required_matches": 1,
+      "name": "Member ID",
+      "match": "exact"
+    },
+    "search_button": {
+      "strategy": "semantic",
+      "frame_path": [],
+      "role": "button",
+      "required_matches": 1,
+      "name": "Search",
+      "match": "exact"
+    },
+    "member_result": {
+      "strategy": "semantic",
+      "frame_path": [],
+      "role": "status",
+      "required_matches": 1
+    }
+  },
+  "steps": [
+    {
+      "step_id": "s0_open",
+      "tool": "navigate",
+      "arguments": {
+        "url": "http://127.0.0.1:4300/"
+      },
+      "postconditions": [
+        {
+          "kind": "visible",
+          "target_id": "page_heading"
+        }
+      ],
+      "source_tool_call_id": "bootstrap"
+    },
+    {
+      "step_id": "s1_enter_id",
+      "tool": "type_text",
+      "target_id": "member_id_field",
+      "arguments": {
+        "mode": "replace",
+        "text": {
+          "source": "input",
+          "path": "/member_id"
+        }
+      },
+      "postconditions": [
+        {
+          "kind": "value_equals",
+          "target_id": "member_id_field",
+          "expected": {
+            "source": "input",
+            "path": "/member_id"
+          }
+        }
+      ],
+      "source_tool_call_id": "call_001"
+    },
+    {
+      "step_id": "s2_search",
+      "tool": "click",
+      "target_id": "search_button",
+      "arguments": {},
+      "postconditions": [
+        {
+          "kind": "matches_schema",
+          "target_id": "member_result",
+          "property": "text",
+          "schema": {
+            "type": "string",
+            "pattern": "^Member .+ \\| [0-9]+\\.[0-9]{2}$"
+          }
+        }
+      ],
+      "source_tool_call_id": "call_002"
+    },
+    {
+      "step_id": "s3_extract",
+      "tool": "extract_data",
+      "arguments": {
+        "fields": [
+          {
+            "name": "member_summary",
+            "target_id": "member_result",
+            "property": "text",
+            "output_type": "string"
+          }
+        ]
+      },
+      "postconditions": [
+        {
+          "kind": "field_extracted",
+          "field": "member_summary"
+        }
+      ],
+      "source_tool_call_id": "call_003"
+    }
+  ],
+  "output_mapping": {
+    "member_id": {
+      "source": "input",
+      "path": "/member_id"
+    },
+    "member_summary": {
+      "source": "step",
+      "step_id": "s3_extract",
+      "path": "/fields/member_summary/value"
+    }
+  },
+  "success_checks": [
+    {
+      "kind": "all_step_postconditions_passed"
+    },
+    {
+      "kind": "outputs_match_schema"
+    }
+  ],
+  "failure_behavior": "stop_and_record; never choose another target or ask an LLM",
+  "content_hash": "sha256:463b9358f1f03b5dd50c7ae6e8ecacb5b23b7d40221920b76bb01a567936f99c"
+}

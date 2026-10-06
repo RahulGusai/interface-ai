@@ -1,0 +1,38 @@
+{
+  "example_only": true,
+  "run_id": "run_validation_001",
+  "kind": "validation_replay",
+  "source_discovery_run_id": "run_discovery_001",
+  "artifact_id": "art_member_lookup_v1",
+  "artifact_content_hash": "sha256:463b9358f1f03b5dd50c7ae6e8ecacb5b23b7d40221920b76bb01a567936f99c",
+  "goal": "Look up the supplied member ID and return the displayed member details",
+  "inputs": {
+    "member_id": "42"
+  },
+  "environment": {
+    "application_id": "synthetic-member-desk",
+    "start_url": "http://127.0.0.1:4300/",
+    "adapter_kind": "browser",
+    "fresh_context": true
+  },
+  "policy_profile_id": "synthetic-member-readonly-v1",
+  "started_at": "2026-10-06T04:00:20.000Z",
+  "finished_at": "2026-10-06T04:00:33.000Z",
+  "status": "succeeded",
+  "model_tool_calls": 0,
+  "bootstrap_tool_calls": 0,
+  "replay_tool_calls": 4,
+  "outputs": {
+    "member_id": "42",
+    "member_summary": "Member Ada | 123.50"
+  },
+  "failure": null,
+  "events_path": "validation-events.jsonl",
+  "evidence_asset_ids": [
+    "ev_validation_001",
+    "ev_validation_002",
+    "ev_validation_003",
+    "ev_validation_004"
+  ],
+  "provenance": "illustrative future lifecycle; not a genuine model or replay run"
+}

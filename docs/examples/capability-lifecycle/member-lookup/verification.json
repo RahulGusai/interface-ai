@@ -1,0 +1,18 @@
+{
+  "example_only": true,
+  "checks": {
+    "artifact_hash_matches": true,
+    "publication_pins_artifact_hash": true,
+    "no_historical_control_or_observation_refs_in_artifact": true,
+    "all_step_targets_declared": true,
+    "discovery_parameters_not_hardcoded": true,
+    "event_sequences_and_times_ordered": true,
+    "tool_call_starts_results_and_raw_inputs_match": true,
+    "recorded_call_counts_match": true,
+    "outputs_match_extraction_and_schema": true,
+    "all_evidence_links_and_hashes_valid": true,
+    "fresh_replay_references": true
+  },
+  "all_passed": true,
+  "scope": "Consistency of illustrative data records only; no model or replay execution verified."
+}

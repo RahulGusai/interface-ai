@@ -1,0 +1,33 @@
+{
+  "name": "interface-ai-runtime",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22 <23 || >=24"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:unit": "vitest run tests/unit",
+    "test:browser": "vitest run tests/browser",
+    "test:integration": "vitest run tests/integration",
+    "demo:runtime": "tsx src/demo/run-task-cli.ts",
+    "demo:computer-use": "tsx src/demo/scripted-run.ts",
+    "format:check": "prettier --check src tests package.json tsconfig.json vitest.config.ts"
+  },
+  "dependencies": {
+    "playwright": "1.58.2",
+    "zod": "4.3.6"
+  },
+  "devDependencies": {
+    "@types/node": "22.19.15",
+    "prettier": "3.8.2",
+    "tsx": "4.21.0",
+    "typescript": "5.9.3",
+    "vitest": "4.1.11"
+  },
+  "overrides": {
+    "esbuild": "0.28.1"
+  }
+}

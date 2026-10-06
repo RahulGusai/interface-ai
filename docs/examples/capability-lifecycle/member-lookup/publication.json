@@ -1,0 +1,8 @@
+{
+  "example_only": true,
+  "artifact_id": "art_member_lookup_v1",
+  "state": "ready",
+  "validation_run_id": "run_validation_001",
+  "published_at": "2026-10-06T04:00:34.000Z",
+  "content_hash": "sha256:463b9358f1f03b5dd50c7ae6e8ecacb5b23b7d40221920b76bb01a567936f99c"
+}

@@ -1,0 +1,52 @@
+{
+  "status": "ok",
+  "observation_id": "obs_discovery_003",
+  "captured_at": "2026-10-06T04:00:05.000Z",
+  "surface": {
+    "id": "browser_discovery",
+    "kind": "browser",
+    "title": "Synthetic member desk",
+    "url": "http://127.0.0.1:4300/"
+  },
+  "screenshot": {
+    "status": "not_requested"
+  },
+  "controls": {
+    "status": "available",
+    "items": [
+      {
+        "ref": "c1",
+        "role": "heading",
+        "name": "Member desk — synthetic data",
+        "state": {
+          "enabled": true
+        }
+      },
+      {
+        "ref": "c3",
+        "role": "textbox",
+        "name": "Member ID",
+        "value": "42",
+        "state": {
+          "enabled": true
+        }
+      },
+      {
+        "ref": "c4",
+        "role": "button",
+        "name": "Search",
+        "state": {
+          "enabled": true
+        }
+      },
+      {
+        "ref": "c5",
+        "role": "status",
+        "name": "Member Ada | 123.50",
+        "state": {
+          "enabled": true
+        }
+      }
+    ]
+  }
+}
