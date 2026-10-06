@@ -1,3 +1,5 @@
+import{randomUUID}from'node:crypto';
+import type{DiscoveryContext}from'../runtime/discovery-context.js';
 import{createInterface}from'node:readline';
 import{startSchema,MAX_LINE}from'./protocol.js';
 import{Transport}from'./transport.js';
@@ -19,8 +21,18 @@ async function execute(c:ReturnType<typeof startSchema.parse>){
  const emit=async(type:string,payload:Record<string,unknown>,image?:ImageContent,step_id:string|null=null)=>{const assets=image?[await stageImage(c.staging_directory,image,type==='target_resolution_finished'?'target_resolution_screenshot':type==='tool_finished'?'post_tool_screenshot':'observation_screenshot')]:[];await transport!.send('event',{event:{type,step_id,payload},assets},true);};
  let result:any;let proposal:any=null;
  if(c.mode==='discovery'){
+ const discovery:DiscoveryContext={deployment:c.deployment,capability_catalog:c.capability_catalog,inputs:c.inputs,records:[],references:[]};
+ discovery.recordReference=async(record,crop,capture,callId)=>{
+   const handle='ref-'+randomUUID();record.target.asset_id=handle;
+   const staged=await stageImage(c.staging_directory,{ref:handle,mimeType:'image/png',bytes:crop},'reference_crop');
+   const reference={asset_handle:handle,staged_path:staged.staged_path,sha256:staged.sha256,source_call_id:callId,...record.provenance};
+   delete reference.observation_id;delete reference.image_ref;
+   discovery.references.push(reference);
+   await emit('target_reference_captured',{call_id:callId,reference:record.provenance,asset_handle:handle,sha256:staged.sha256},capture.image);
+ };
  const model=new OpenRouterClient({apiKey:process.env.OPENROUTER_API_KEY??'',model:process.env.OPENROUTER_MODEL??''});
- result=await runTask({goal:c.task,targetUrl:c.deployment.base_url},{model,adapterFactory:factory,policy},{signal:controller.signal,maxToolCalls:c.runtime.max_tool_calls,onAudit:async(record,image)=>{const payload:any={...record};delete payload.type;if('call'in record){payload.call_id=record.call.id;payload.tool=record.call.name;payload.dispatch_state=record.type==='tool_started'?'not_dispatched':record.type==='tool_finished'&&['completed','evaluated','condition_met'].includes(record.result.status)?'completed':'uncertain';}await emit(record.type,payload,image);}});
+ result=await runTask({goal:c.task,targetUrl:c.deployment.base_url},{model,adapterFactory:factory,policy},{discovery,signal:controller.signal,maxToolCalls:c.runtime.max_tool_calls,onAudit:async(record,image)=>{const payload:any={...record};delete payload.type;if('call'in record){payload.call_id=record.call.id;payload.tool=record.call.name;payload.dispatch_state=record.type==='tool_started'?'not_dispatched':record.type==='tool_finished'&&['completed','evaluated','condition_met'].includes(record.result.status)?'completed':'uncertain';}await emit(record.type,payload,image);}});
+ proposal=discovery.proposal??null;
  }else{const modulePath='../replay/run-replay.js';const{runReplay}=await import(modulePath);result=await runReplay(c,{adapterFactory:factory,policy},{signal:controller.signal,onAudit:emit});}
  await transport!.send('completed',{runtime_result:result,discovery_proposal:proposal},true);
  lines.close();

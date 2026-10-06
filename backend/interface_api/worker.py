@@ -79,7 +79,7 @@ class Worker:
                 for child in children:self.repo.transition(child['run_id'],'cancelled' if child['status']=='queued' else 'cancelling',conn=c)
                 return self.repo.get('runs','run_id',ident,c)
         row=await asyncio.to_thread(mark)
-        if self.active==ident and self.cancel_signal:self.cancel_signal.set()
+        if (self.active==ident or row.get('parent_run_id')==self.active) and self.cancel_signal:self.cancel_signal.set()
         return row
     async def shutdown(self):
         self.accepting=False
