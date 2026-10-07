@@ -81,7 +81,7 @@ The destination must be new. Missing or hash-mismatched objects fail export. Ins
 
 The repo-relative DB defaults to `data/interface-ai.sqlite3`. SQLite uses WAL, foreign keys, full synchronous commits, versioned runtime migrations and a process ownership lock. One process/replica owns a memory queue with 16 pending jobs and one browser. The queue is deliberately not durable.
 
-The Dockerfile is a deployment recipe, not a deployment claim. Mount a persistent Railway volume at `/app/data`, set `RAILWAY_VOLUME_MOUNT_PATH=/app/data`, and run a single replica/worker with the existing private MinIO settings. Railway forces headless execution. The API child inherits only the required runtime environment; server credentials never travel in argv or the pipe start envelope. Keep the DB volume across releases; do not run schema migration as a separate predeploy job.
+The service is deployed on Railway; see the [deployment record](docs/railway-deployment.md) for the public API origin, volume and verified health. For another deployment, mount a persistent Railway volume at `/app/data`, set `RAILWAY_VOLUME_MOUNT_PATH=/app/data`, and run a single replica/worker with the existing private MinIO settings. Railway forces headless execution. The API child inherits only the required runtime environment; server credentials never travel in argv or the pipe start envelope. Keep the DB volume across releases; do not run schema migration as a separate predeploy job.
 
 ```sh
 PYTHONPATH=backend backend/.venv/bin/python -m interface_api.maintenance backup /safe/location/backup.sqlite3
