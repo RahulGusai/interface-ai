@@ -4,6 +4,7 @@ import type { BrowserAdapterPort } from "../adapters/surface.js";
 import { requestIntervention } from "./intervention.js";
 import { finalize, type TaskContract } from "./finalization.js";
 import { validateToolResponse } from "./tool-response.js";
+import { toolValidationMessage } from "./validation-feedback.js";
 import { executeTool } from "../tools/registry.js";
 export type DispatchContext = {
   adapter: BrowserAdapterPort;
@@ -19,12 +20,12 @@ export async function dispatchTool(
   let action;
   try {
     action = parseToolAction(call.name, JSON.parse(call.argumentsJson));
-  } catch {
+  } catch (error) {
     return {
       result: {
         status: "error",
         code: "INVALID_TOOL_CALL",
-        message: "Unknown tool or invalid arguments",
+        message: toolValidationMessage(error),
       },
     };
   }

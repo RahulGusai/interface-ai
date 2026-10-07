@@ -146,7 +146,7 @@ const descriptions: Record<ToolName, string> = {
   request_human:
     "Stop autonomous work and report intervention request; takeover is deferred.",
   finish_task:
-    "DRAFT: propose terminal outcome. Goal achievement awaits artifact design, never claims stored capability.",
+    "Propose terminal outcome. Discovery goal_achieved requires a complete valid proposal with observed durable steps, passing success checks, and output bindings. outputs must equal proposal.observed_outputs. After rejection, repair the reported fields and resubmit the proposal; a summary and outputs alone are insufficient.",
 };
 export const toolDefinitions = Object.entries(toolSchemas).map(
   ([name, schema]) => ({

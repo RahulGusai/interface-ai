@@ -15,7 +15,11 @@ import type { ModelClient } from "../llm/model-client.js";
 import type { TaskContract } from "./finalization.js";
 import { parseTaskInput, maxToolCalls } from "./config.js";
 import { ConversationHistory } from "./history.js";
-import { buildInitialMessages } from "./prompts.js";
+import {
+  toolValidationMessage,
+  proposalValidationMessage,
+} from "./validation-feedback.js";
+import { buildInitialMessages, DISCOVERY_PROMPT } from "./prompts.js";
 import type { AuditSink } from "./audit.js";
 import { dispatchTool, type DispatchContext } from "./dispatch.js";
 import {
@@ -118,12 +122,12 @@ export async function runTask(
               message: "Observe again before using this reference",
             },
           };
-      } catch {
+      } catch (error) {
         preflight = {
           result: {
             status: "error",
             code: "INVALID_TOOL_CALL",
-            message: "Unknown tool or invalid arguments",
+            message: toolValidationMessage(error),
           },
         };
       }
@@ -152,13 +156,12 @@ export async function runTask(
           };
           if (fresh.observation.status !== "ok") throw Error("CAPTURE_FAILED");
           parsed.observation_id = fresh.observation.observation_id;
-        } catch {
-          return {
+        } catch (error) {
+          preflight = {
             result: {
-              status: "rejected" as const,
+              status: "rejected",
               code: "DURABLE_PROPOSAL_INVALID",
-              message:
-                "Supply an observed durable plan with valid contract, inputs, targets and fresh success checks",
+              message: proposalValidationMessage(error),
             },
           };
         }
@@ -321,8 +324,7 @@ export async function runTask(
       context.history.messages.push({
         role: "system",
         content: JSON.stringify({
-          instructions:
-            "You are discovering a reusable operation. On goal_achieved finish_task requires proposal_version 1 and an observed durable definition. Use ordered steps with semantic role/name targets (exact true, scope null or ancestry) and bindings. Never put observation/control/call IDs or global points in saved steps. Use kind input/path for parameters, step_output for extracted results, environment base_url for entry. Include finite success checks and typed output mapping. Propose reuse of a catalog capability only for the same operation with identical schemas; otherwise propose new with a reason. Point actions require recording_hint.visual_reference rectangle and relative_point from the actual current screenshot before action; reference handles returned in history must be used in the final plan. Non-success outcomes do not publish.",
+          instructions: DISCOVERY_PROMPT,
           deployment: options.discovery.deployment,
           capability_catalog: options.discovery.capability_catalog,
           requested_inputs: options.discovery.inputs,
