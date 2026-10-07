@@ -7,6 +7,37 @@ const obs = (r: ToolResponse) => {
   if (o.status !== "ok") throw new Error(JSON.stringify(o));
   return o;
 };
+it("captures a settling search view without dispatching the click again", async () => {
+  const f = await startFixture(
+    undefined,
+    `<button onclick="this.dataset.clicks=String(Number(this.dataset.clicks||0)+1);const start=performance.now();const timer=setInterval(()=>{document.querySelector('#progress').style.width=(10+(performance.now()-start))+'px';if(performance.now()-start>750){clearInterval(timer);document.querySelector('#progress').textContent='Results ready'}},10)">Search</button><div id="progress" style="width:10px;height:20px">Loading</div>`,
+  );
+  const a = await BrowserAdapter.create({ headless: true });
+  try {
+    const o = obs(await a.execute({ name: "navigate", input: { url: f.url } }));
+    const search =
+      o.controls.status === "available"
+        ? o.controls.items.find((c) => c.name === "Search")!
+        : undefined;
+    const response = await a.execute({
+      name: "click",
+      input: {
+        observation_id: o.observation_id,
+        target: { kind: "control", control_ref: search!.ref },
+      },
+    });
+    expect(response.result).toMatchObject({
+      status: "completed",
+      observation: { status: "ok", screenshot: { status: "available" } },
+    });
+    expect(
+      await (a as any).page.locator("button").getAttribute("data-clicks"),
+    ).toBe("1");
+  } finally {
+    await a.close();
+    await f.close();
+  }
+});
 it("allows same-document navigation without a path policy", async () => {
   const f = await startFixture(
     undefined,

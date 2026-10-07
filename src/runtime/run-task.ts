@@ -20,6 +20,7 @@ import { dispatchTool, type DispatchContext } from "./dispatch.js";
 import {
   toolDefinitions,
   toolSchemas,
+  parseToolAction,
   type ToolResponse,
 } from "../contracts/tools.js";
 export type TaskRunContext = DispatchContext & {
@@ -87,6 +88,7 @@ export async function runTask(
     let parsed: any;
     let recordedTarget: any;
     let hint: any;
+    let preflight: ToolResponse | undefined;
     try {
       parsed = JSON.parse(call.argumentsJson);
     } catch {
@@ -95,7 +97,40 @@ export async function runTask(
     if (options.discovery && parsed && typeof parsed === "object") {
       hint = parsed.recording_hint;
       delete parsed.recording_hint;
-      if (call.name === "finish_task" && parsed.outcome === "goal_achieved") {
+      try {
+        const action = parseToolAction(call.name, parsed);
+        if (
+          "observation_id" in action.input &&
+          (!context!.adapter.isCurrentObservation(
+            action.input.observation_id,
+          ) ||
+            (("target" in action.input || action.name === "extract_data") &&
+              (!currentCapture ||
+                currentCapture.observation.status !== "ok" ||
+                action.input.observation_id !==
+                  currentCapture.observation.observation_id)))
+        )
+          preflight = {
+            result: {
+              status: "error",
+              code: "STALE_OBSERVATION",
+              message: "Observe again before using this reference",
+            },
+          };
+      } catch {
+        preflight = {
+          result: {
+            status: "error",
+            code: "INVALID_TOOL_CALL",
+            message: "Unknown tool or invalid arguments",
+          },
+        };
+      }
+      if (
+        !preflight &&
+        call.name === "finish_task" &&
+        parsed.outcome === "goal_achieved"
+      ) {
         try {
           if (!parsed.proposal) throw Error("DURABLE_PLAN_REQUIRED");
           const fresh = await context!.adapter.capture("both");
@@ -127,7 +162,7 @@ export async function runTask(
           };
         }
       }
-      if (parsed.target) {
+      if (!preflight && parsed.target) {
         if (
           !currentCapture ||
           currentCapture.observation.status !== "ok" ||
@@ -149,7 +184,7 @@ export async function runTask(
           );
         }
       }
-      if (call.name === "extract_data") {
+      if (!preflight && call.name === "extract_data") {
         if (!currentCapture) throw Error("REFERENCE_CAPTURE_REQUIRED");
         parsed._durable_fields = Object.fromEntries(
           parsed.fields.map((f: any) => [
@@ -172,13 +207,14 @@ export async function runTask(
       input: normalized,
       source,
       ...({
-        proposed_input: JSON.parse(call.argumentsJson),
+        proposed_input: parsed ? JSON.parse(call.argumentsJson) : null,
         durable_target: recordedTarget,
       } as any),
     });
     const started = performance.now();
     options.signal?.throwIfAborted();
-    const response = await dispatchTool(context!, dispatchedCall);
+    const response =
+      preflight ?? (await dispatchTool(context!, dispatchedCall));
     const observation =
       "observation" in response.result
         ? response.result.observation
@@ -188,6 +224,7 @@ export async function runTask(
     if (observation) currentCapture = { observation, image: response.image };
     if (
       options.discovery &&
+      !preflight &&
       source === "model" &&
       !["finish_task", "request_human"].includes(call.name)
     )

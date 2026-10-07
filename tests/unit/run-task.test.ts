@@ -4,6 +4,8 @@ import { makeFakeAdapter } from "../helpers/fake-adapter.js";
 import { syntheticContract } from "../../src/demo/synthetic-contract.js";
 import type { AgentTurn, ToolCall } from "../../src/contracts/run.js";
 import type { InternalMessage } from "../../src/runtime/history.js";
+import type { DiscoveryContext } from "../../src/runtime/discovery-context.js";
+import type { ToolResponse } from "../../src/contracts/tools.js";
 const input = { goal: "Find member", targetUrl: "https://example.org/app" };
 const call = (id: string, name: string, args: unknown): ToolCall => ({
   id,
@@ -44,6 +46,123 @@ function setup(
     },
   };
 }
+it("discovery rejects a stale retry after capture failure and recovers by observing without another click", async () => {
+  const adapter = makeFakeAdapter();
+  const execute = adapter.execute.bind(adapter);
+  const recoveringAdapter = {
+    ...adapter,
+    async execute(
+      action: Parameters<typeof execute>[0],
+    ): Promise<ToolResponse> {
+      const response = await execute(action);
+      if (action.name === "click") {
+        return {
+          result: {
+            status: "uncertain",
+            observation: {
+              status: "error",
+              code: "CAPTURE_FAILED",
+              message: "Fresh observation unavailable",
+              retryable: true,
+            },
+          },
+        };
+      }
+      const observation =
+        "observation" in response.result
+          ? response.result.observation
+          : response.result;
+      if (observation.status === "ok") {
+        observation.controls = {
+          status: "available",
+          items: [
+            {
+              ref: "search",
+              role: "button",
+              name: "Search",
+              state: { enabled: true },
+            },
+          ],
+        };
+      }
+      return response;
+    },
+  };
+  const turns = [
+    batch([
+      call("search", "click", {
+        observation_id: "obs_1",
+        target: { kind: "control", control_ref: "search" },
+      }),
+    ]),
+    batch([
+      call("retry", "click", {
+        observation_id: "obs_1",
+        target: { kind: "control", control_ref: "search" },
+      }),
+    ]),
+    batch([call("fresh", "observe_ui", { mode: "both" })]),
+    {
+      kind: "final_text" as const,
+      text: "Stopped",
+      assistantMessage: { role: "assistant" as const, content: "Stopped" },
+    },
+  ];
+  const audits: any[] = [];
+  const histories: InternalMessage[][] = [];
+  const discovery: DiscoveryContext = {
+    deployment: {
+      app_deployment_id: "test",
+      base_url: input.targetUrl,
+      product_id: "desk",
+      ui_variant: "standard",
+      vendor_release: null,
+      config_version: 1,
+    },
+    capability_catalog: [],
+    inputs: {},
+    records: [],
+    references: [],
+  };
+  const result = await runTask(
+    input,
+    {
+      adapterFactory: {
+        async createForTask() {
+          return recoveringAdapter;
+        },
+      },
+      model: {
+        model: "fake",
+        async complete(history) {
+          histories.push([...history]);
+          return turns.shift()!;
+        },
+      },
+    },
+    {
+      discovery,
+      onAudit: async (record) => {
+        audits.push(record);
+      },
+    },
+  );
+  expect(result.status).toBe("agent_stopped_unverified");
+  expect(adapter.calls.map((c) => c.name)).toEqual([
+    "navigate",
+    "click",
+    "observe_ui",
+  ]);
+  expect(
+    audits.find((r) => r.type === "tool_finished" && r.call.id === "retry")
+      ?.result,
+  ).toMatchObject({ status: "error", code: "STALE_OBSERVATION" });
+  expect(
+    histories[2]?.find((m) => m.role === "tool" && m.tool_call_id === "retry"),
+  ).toMatchObject({ content: expect.stringContaining("STALE_OBSERVATION") });
+  expect(discovery.records.map((r) => r.call_id)).toEqual(["search", "fresh"]);
+  expect(adapter.closed).toBe(true);
+});
 it("backend discovery needs no policy and bootstraps the deployment URL before clicking", async () => {
   const s = setup([
     batch([

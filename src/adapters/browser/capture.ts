@@ -147,59 +147,73 @@ export async function collectControls(page: Page): Promise<{
   const controls: Control[] = [];
   const bindings = new Map<string, Binding>();
   const links: string[] = [];
-  for (const frame of page.frames()) {
-    const elements = (await frame.$$("body *")) as Element[];
-    for (const element of elements) {
-      const semantics = await readSemantics(element);
-      if (!semantics) {
-        await element.dispose();
-        continue;
-      }
-      const ref = `c${controls.length + 1}`;
-      const control: Control = {
-        ref,
-        ...semantics,
-        ancestry: [
-          { role: "document", name: frame.name(), exact: true },
-          ...(semantics.ancestry ?? []),
-        ],
-        frame: {
-          name: frame.name(),
-          url_path: new URL(
-            frame.url() === "about:blank" ? "http://blank/" : frame.url(),
-          ).pathname,
-        },
-      };
-      if (control.role === "option") {
-        const select = await element.evaluateHandle((e) => e.closest("select"));
-        try {
-          for (const binding of bindings.values())
-            if (
-              binding.control.role === "combobox" &&
-              (await binding.element.evaluate(
-                (node, parent) => node === parent,
-                select,
-              ))
-            ) {
-              control.parent_ref = binding.control.ref;
-              break;
-            }
-        } finally {
-          await select.dispose();
+  const handles = new Set<Element>();
+  try {
+    for (const frame of page.frames()) {
+      const elements = (await frame.$$("body *")) as Element[];
+      for (const element of elements) handles.add(element);
+      for (const element of elements) {
+        const semantics = await readSemantics(element);
+        if (!semantics) {
+          await element.dispose();
+          handles.delete(element);
+          continue;
         }
+        const ref = `c${controls.length + 1}`;
+        const control: Control = {
+          ref,
+          ...semantics,
+          ancestry: [
+            { role: "document", name: frame.name(), exact: true },
+            ...(semantics.ancestry ?? []),
+          ],
+          frame: {
+            name: frame.name(),
+            url_path: new URL(
+              frame.url() === "about:blank" ? "http://blank/" : frame.url(),
+            ).pathname,
+          },
+        };
+        if (control.role === "option") {
+          const select = await element.evaluateHandle((e) =>
+            e.closest("select"),
+          );
+          try {
+            for (const binding of bindings.values())
+              if (
+                binding.control.role === "combobox" &&
+                (await binding.element.evaluate(
+                  (node, parent) => node === parent,
+                  select,
+                ))
+              ) {
+                control.parent_ref = binding.control.ref;
+                break;
+              }
+          } finally {
+            await select.dispose();
+          }
+        }
+        const options = await element.evaluate((e) =>
+          e instanceof HTMLSelectElement
+            ? Array.from(e.options).map((o) => o.label)
+            : undefined,
+        );
+        bindings.set(ref, { element, control, options });
+        controls.push(control);
+        const href = await element.evaluate((e) =>
+          e instanceof HTMLAnchorElement ? e.href : null,
+        );
+        if (href) links.push(href);
       }
-      const options = await element.evaluate((e) =>
-        e instanceof HTMLSelectElement
-          ? Array.from(e.options).map((o) => o.label)
-          : undefined,
-      );
-      bindings.set(ref, { element, control, options });
-      controls.push(control);
-      const href = await element.evaluate((e) =>
-        e instanceof HTMLAnchorElement ? e.href : null,
-      );
-      if (href) links.push(href);
     }
+    return { controls, bindings, links };
+  } catch (error) {
+    // A document replacement can interrupt collection before bindings are returned.
+    // Release every handle from the incomplete attempt before the capture retries.
+    await Promise.all(
+      [...handles].map((element) => element.dispose().catch(() => {})),
+    );
+    throw error;
   }
-  return { controls, bindings, links };
 }

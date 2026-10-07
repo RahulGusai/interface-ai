@@ -147,8 +147,9 @@ export class BrowserAdapter implements BrowserAdapterPort {
   private async captureAttempt(
     mode: "screenshot" | "controls" | "both",
   ): Promise<Capture> {
+    const deadline = performance.now() + this.options.captureMs;
     await this.invalidate();
-    for (let attempt = 0; attempt < 2; attempt++) {
+    while (performance.now() < deadline) {
       let fresh = new Map<string, Binding>();
       try {
         if (this.poisoned || this.state.closed || this.state.blocked)
@@ -200,6 +201,9 @@ export class BrowserAdapter implements BrowserAdapterPort {
           await Promise.all(
             [...fresh.values()].map((b) => b.element.dispose().catch(() => {})),
           );
+          await new Promise((resolve) =>
+            setTimeout(resolve, this.options.pollMs),
+          );
           continue;
         }
         const title = await this.page.title();
@@ -234,7 +238,12 @@ export class BrowserAdapter implements BrowserAdapterPort {
         await Promise.all(
           [...fresh.values()].map((b) => b.element.dispose().catch(() => {})),
         );
-        break;
+        if (this.poisoned || this.state.closed || this.state.blocked) break;
+        // Navigation or rerendering can invalidate a read. Retry only the capture,
+        // never the action that preceded it, within the existing capture deadline.
+        await new Promise((resolve) =>
+          setTimeout(resolve, this.options.pollMs),
+        );
       }
     }
     return { observation: failedObservation() };
