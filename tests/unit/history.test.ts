@@ -4,6 +4,126 @@ import { ConversationHistory } from "../../src/runtime/history.js";
 import { syntheticContract } from "../../src/demo/synthetic-contract.js";
 import { finalize } from "../../src/runtime/finalization.js";
 import { convertNumber } from "../../src/adapters/browser/extraction.js";
+it("projects only current controls and screenshot while retaining tool outcomes and full internal history", () => {
+  const h = new ConversationHistory([]);
+  for (const id of ["a", "b"]) {
+    const calls = [
+      { id, name: "observe_ui", argumentsJson: '{"mode":"both"}' },
+    ];
+    h.appendAssistantToolCalls({
+      role: "assistant",
+      content: null,
+      tool_calls: calls,
+    });
+    h.appendToolResult(id, {
+      status: "ok",
+      observation_id: id,
+      captured_at: new Date().toISOString(),
+      surface: { id: "s", kind: "browser", title: id },
+      controls: {
+        status: "available",
+        items: [{ ref: id, role: "text", name: id, state: {} }],
+      },
+      screenshot: { status: "available", image_ref: id, width: 1, height: 1 },
+    });
+    h.appendObservationImage(
+      { ref: id, mimeType: "image/png", bytes: new Uint8Array([1]) },
+      id,
+      id,
+    );
+  }
+  const before = JSON.stringify(h.messages);
+  const projected = h.toOpenRouterMessages() as {
+    role: string;
+    content: any;
+    tool_call_id?: string;
+  }[];
+  const results = projected.filter((m) => m.role === "tool");
+  expect(results.map((m) => m.tool_call_id)).toEqual(["a", "b"]);
+  expect(JSON.parse(results[0]!.content)).toMatchObject({
+    status: "ok",
+    observation_id: "a",
+    context_note: expect.stringContaining("Historical"),
+  });
+  expect(JSON.parse(results[0]!.content).controls).toBeUndefined();
+  expect(JSON.parse(results[1]!.content).controls.items[0].ref).toBe("b");
+  const images = projected.filter((m) => m.role === "user");
+  expect(images).toHaveLength(1);
+  expect(JSON.stringify(images[0])).toContain("observation_id=b");
+  expect(JSON.stringify(h.messages)).toBe(before);
+});
+it("omits obsolete initial UI detail while retaining extracted data and verification", () => {
+  const h = new ConversationHistory([]);
+  const capture = (id: string) => ({
+    status: "ok" as const,
+    observation_id: id,
+    captured_at: new Date().toISOString(),
+    surface: { id: "s", kind: "browser" as const, title: "Desk" },
+    controls: { status: "available" as const, items: [] },
+    screenshot: { status: "not_requested" as const },
+  });
+  h.appendUserObservation({ status: "completed", observation: capture("old") });
+  const calls = [{ id: "x", name: "extract_data", argumentsJson: "{}" }];
+  h.appendAssistantToolCalls({
+    role: "assistant",
+    content: null,
+    tool_calls: calls,
+  });
+  h.appendToolResult("x", {
+    status: "completed",
+    observation: capture("new"),
+    fields: { balance: { status: "extracted", value: 25 } },
+  });
+  const projected = h.toOpenRouterMessages() as {
+    role: string;
+    content: string;
+  }[];
+  expect(projected[0]!.content).not.toContain('"controls"');
+  expect(JSON.parse(projected.at(-1)!.content).fields).toEqual({
+    balance: { status: "extracted", value: 25 },
+  });
+});
+it.each(["STALE_OBSERVATION", "CAPTURE_FAILED"])(
+  "does not expose expired controls or images after %s",
+  (code) => {
+    const h = new ConversationHistory([]);
+    h.appendUserObservation({
+      status: "ok",
+      observation_id: "old",
+      captured_at: new Date().toISOString(),
+      surface: { id: "s", kind: "browser", title: "Desk" },
+      controls: { status: "available", items: [] },
+      screenshot: {
+        status: "available",
+        image_ref: "old",
+        width: 1,
+        height: 1,
+      },
+    });
+    h.appendObservationImage(
+      { ref: "old", mimeType: "image/png", bytes: new Uint8Array([1]) },
+      "old",
+      "bootstrap",
+    );
+    h.appendAssistantToolCalls({
+      role: "assistant",
+      content: null,
+      tool_calls: [{ id: "failed", name: "observe_ui", argumentsJson: "{}" }],
+    });
+    h.appendToolResult("failed", {
+      status: "error",
+      code,
+      message: "Observe again",
+    });
+    const projected = h.toOpenRouterMessages() as {
+      role: string;
+      content: any;
+    }[];
+    expect(projected.filter((m) => Array.isArray(m.content))).toHaveLength(0);
+    expect(projected[0]!.content).not.toContain('"controls"');
+    expect(JSON.parse(projected.at(-1)!.content).code).toBe(code);
+  },
+);
 it("keeps tool-result batches contiguous while pairing each image with its call ID", () => {
   const h = new ConversationHistory([]);
   const calls = ["a", "b"].map((id) => ({
