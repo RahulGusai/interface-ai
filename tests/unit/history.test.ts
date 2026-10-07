@@ -4,6 +4,79 @@ import { ConversationHistory } from "../../src/runtime/history.js";
 import { syntheticContract } from "../../src/demo/synthetic-contract.js";
 import { finalize } from "../../src/runtime/finalization.js";
 import { convertNumber } from "../../src/adapters/browser/extraction.js";
+it("retains historical empty-search evidence and input values after clearing the form without expired targeting data", () => {
+  const h = new ConversationHistory([]);
+  const capture = (id: string, items: any[]) => ({
+    status: "ok" as const,
+    observation_id: id,
+    captured_at: new Date().toISOString(),
+    surface: { id: "s", kind: "browser" as const, title: "Customer Search" },
+    controls: { status: "available" as const, items },
+    screenshot: { status: "not_requested" as const },
+  });
+  h.appendUserObservation(
+    capture("search-result", [
+      {
+        ref: "old-name",
+        role: "textbox",
+        name: "Customer name",
+        text: "",
+        value: "Freya Ferreira",
+        state: {},
+      },
+      {
+        ref: "old-results",
+        role: "status",
+        name: "Results",
+        text: "(0 customers)\nNo customers match these criteria.",
+        state: {},
+      },
+      {
+        ref: "duplicate",
+        role: "text",
+        name: "No customers match these criteria.",
+        text: "No customers match these criteria.",
+        state: {},
+      },
+      {
+        ref: "seed",
+        role: "text",
+        name: "Fixture seed 1001",
+        text: "Fixture seed 1001",
+        state: {},
+      },
+    ]),
+  );
+  h.appendAssistantToolCalls({
+    role: "assistant",
+    content: null,
+    tool_calls: [{ id: "clear", name: "click", argumentsJson: "{}" }],
+  });
+  h.appendToolResult("clear", {
+    status: "completed",
+    observation: capture("cleared", []),
+  });
+  const original = JSON.stringify(h.messages);
+  const projected = h.toOpenRouterMessages() as { content: string }[];
+  const historical = JSON.parse(
+    projected[0]!.content.split("UNTRUSTED initial UI observation: ")[1]!,
+  );
+  expect(historical.visible_text).toContain(
+    "No customers match these criteria.",
+  );
+  expect(
+    historical.visible_text.filter(
+      (s: string) => s === "No customers match these criteria.",
+    ),
+  ).toHaveLength(1);
+  expect(historical.visible_text).toContain("Fixture seed 1001");
+  expect(historical.input_values).toEqual([
+    { name: "Customer name", value: "Freya Ferreira" },
+  ]);
+  expect(historical.controls).toBeUndefined();
+  expect(JSON.stringify(historical)).not.toContain("old-name");
+  expect(JSON.stringify(h.messages)).toBe(original);
+});
 it("projects only current controls and screenshot while retaining tool outcomes and full internal history", () => {
   const h = new ConversationHistory([]);
   for (const id of ["a", "b"]) {

@@ -93,13 +93,26 @@ function projectResult(
     observation.observation_id === currentObservationId
   )
     return result;
-  const {
-    controls: _controls,
-    screenshot: _screenshot,
-    ...summary
-  } = observation;
+  const { controls, screenshot: _screenshot, ...summary } = observation;
+  const visibleText = new Set<string>();
+  const inputValues = new Map<string, { name: string; value: string }>();
+  for (const control of controls?.items ?? []) {
+    // Preserve observed facts, including empty-search results, without retaining
+    // obsolete references, coordinates, ancestry or duplicate container text.
+    const text = control.text || control.name || "";
+    for (const line of text.split("\n")) {
+      const trimmed = line.trim();
+      if (trimmed) visibleText.add(trimmed);
+    }
+    if (typeof control.value === "string") {
+      const value = { name: control.name, value: control.value };
+      inputValues.set(JSON.stringify(value), value);
+    }
+  }
+  summary.visible_text = [...visibleText];
+  summary.input_values = [...inputValues.values()];
   summary.context_note =
-    "Historical observation: controls and screenshot omitted; these references must not be reused. Call observe_ui for fresh references.";
+    "Historical observation: visible text and input values are past facts, not current targeting data. Controls and screenshot omitted; these references must not be reused. Call observe_ui for fresh references.";
   return result.observation ? { ...result, observation: summary } : summary;
 }
 export function projectMessages(messages: InternalMessage[]): unknown[] {
