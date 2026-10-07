@@ -6,6 +6,7 @@ import type { AgentTurn, ToolCall } from "../../src/contracts/run.js";
 import type { InternalMessage } from "../../src/runtime/history.js";
 import type { DiscoveryContext } from "../../src/runtime/discovery-context.js";
 import type { ToolResponse } from "../../src/contracts/tools.js";
+import { OpenRouterClient } from "../../src/llm/openrouter-client.js";
 const input = { goal: "Find member", targetUrl: "https://example.org/app" };
 const call = (id: string, name: string, args: unknown): ToolCall => ({
   id,
@@ -272,6 +273,53 @@ it("opens the supplied URL and closes the adapter on provider error", async () =
     input: { url: targetUrl },
   });
   expect(s.adapters[0]?.closed).toBe(true);
+});
+it("persists the specific safe provider failure after a stale result", async () => {
+  const s = setup([
+    batch([
+      call("stale", "click", {
+        observation_id: "old",
+        target: { kind: "control", control_ref: "c1" },
+      }),
+    ]),
+  ]);
+  let turn = 0;
+  const scripted = s.deps.model;
+  const client = new OpenRouterClient(
+    { apiKey: "SECRET", model: "test" },
+    async () => new Response("SECRET", { status: 429 }),
+  );
+  const audit: any[] = [];
+  const result = await runTask(
+    input,
+    {
+      ...s.deps,
+      model: {
+        model: "test",
+        async complete(history, tools, options) {
+          return turn++ === 0
+            ? scripted.complete(history)
+            : client.complete(history, tools, options);
+        },
+      },
+    },
+    {
+      onAudit: async (record) => {
+        audit.push(record);
+      },
+    },
+  );
+  expect(result.status).toBe("provider_error");
+  expect(result.error).toEqual({
+    code: "PROVIDER_HTTP",
+    message: "Provider request failed (HTTP 429)",
+  });
+  expect(audit.find((r) => r.type === "provider_failed")).toMatchObject({
+    modelTurn: 2,
+    error: result.error,
+  });
+  expect(JSON.stringify(audit)).not.toContain("SECRET");
+  expect(s.adapters[0]?.calls.map((c) => c.name)).toEqual(["navigate"]);
 });
 it("sequential stale dependent references never reach browser", async () => {
   const s = setup([

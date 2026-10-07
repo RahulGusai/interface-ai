@@ -127,6 +127,90 @@ it("does not disclose HTTP response or transport secrets", async () => {
     ).rejects.not.toThrow("SECRET");
   }
 });
+it("recognizes provider errors inside HTTP 200 without disclosing raw messages", async () => {
+  const c = new OpenRouterClient(
+    config,
+    async () =>
+      new Response(
+        JSON.stringify({
+          error: {
+            code: 502,
+            message: "SECRET upstream response",
+            metadata: { error_type: "server", raw: "SECRET" },
+          },
+        }),
+      ),
+  );
+  await expect(c.complete([], toolDefinitions)).rejects.toMatchObject({
+    code: "PROVIDER_HTTP",
+    message:
+      "Provider request failed (HTTP 200; provider code 502; type server)",
+  });
+});
+it("distinguishes empty length-limited output from malformed provider output", async () => {
+  const c = new OpenRouterClient(
+    config,
+    async () =>
+      new Response(
+        JSON.stringify({
+          choices: [{ finish_reason: "length", message: { content: "" } }],
+        }),
+      ),
+  );
+  await expect(c.complete([], toolDefinitions)).rejects.toMatchObject({
+    code: "PROVIDER_OUTPUT_LIMIT",
+    message: "Provider exhausted its output limit without a usable response",
+  });
+});
+it.each(["headers", "body"])(
+  "reports provider deadline expiry during %s distinctly",
+  async (phase) => {
+    const timeout = new DOMException("SECRET", "TimeoutError");
+    const c = new OpenRouterClient(config, async () => {
+      if (phase === "headers") throw timeout;
+      const response = new Response("{}");
+      response.json = async () => {
+        throw timeout;
+      };
+      return response;
+    });
+    await expect(c.complete([], toolDefinitions)).rejects.toMatchObject({
+      code: "PROVIDER_TIMEOUT",
+    });
+  },
+);
+it("reports HTTP and allowlisted error categories without copying arbitrary provider metadata", async () => {
+  const c = new OpenRouterClient(
+    config,
+    async () =>
+      new Response(
+        JSON.stringify({
+          error: {
+            code: 400,
+            message: "SECRET",
+            metadata: { error_type: "context_length_exceeded" },
+          },
+        }),
+        { status: 400 },
+      ),
+  );
+  await expect(c.complete([], toolDefinitions)).rejects.toMatchObject({
+    code: "PROVIDER_HTTP",
+    message:
+      "Provider request failed (HTTP 400; provider code 400; type context_length_exceeded)",
+  });
+  const d = new OpenRouterClient(
+    config,
+    async () =>
+      new Response(
+        JSON.stringify({
+          error: { code: 500, metadata: { error_type: "SECRET" } },
+        }),
+        { status: 500 },
+      ),
+  );
+  await expect(d.complete([], toolDefinitions)).rejects.not.toThrow("SECRET");
+});
 it("fails missing image bytes before transport and refuses unmatched history", async () => {
   const fetcher = vi.fn();
   const c = new OpenRouterClient(config, fetcher);

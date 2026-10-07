@@ -21,6 +21,12 @@ export type AuditRecord =
   | { type: "model_proposed"; modelTurn: number; calls: ToolCall[] }
   | { type: "model_final_text"; modelTurn: number; text: string }
   | {
+      type: "provider_failed";
+      modelTurn: number;
+      error: { code: string; message: string };
+      elapsedMs: number;
+    }
+  | {
       type: "tool_started";
       modelTurn: number;
       call: ToolCall;

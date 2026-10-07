@@ -11,6 +11,7 @@ from test_storage import SDK, Storage
 
 from interface_api.config import Settings
 from interface_api.errors import ApiError
+from interface_api.lifecycle import Lifecycle
 from interface_api.main import create_app
 from interface_api.reads import Reads
 from interface_api.services import Services
@@ -42,6 +43,32 @@ def settings(tmp_path):
         openrouter_model="test-only",
         _env_file=None,
     )
+
+
+@pytest.mark.asyncio
+async def test_discovery_failure_preserves_specific_provider_code(repo, tmp_path):
+    row = run(repo)
+    repo.transition(row["run_id"], "running")
+
+    class ProviderFailure:
+        async def execute_raw(self, ident):
+            return {
+                "runtime_result": {
+                    "status": "provider_error",
+                    "summary": "Provider request failed (HTTP 429)",
+                    "error": {
+                        "code": "PROVIDER_HTTP",
+                        "message": "Provider request failed (HTTP 429)",
+                    },
+                }
+            }
+
+    worker = ProviderFailure()
+    worker.settings = settings(tmp_path)
+    await Lifecycle(repo, worker, None).execute(row["run_id"])
+    failed = Reads(repo).run(repo.get("runs", "run_id", row["run_id"]))
+    assert failed["outcome"]["code"] == "PROVIDER_HTTP"
+    assert failed["outcome"]["message"] == "Provider request failed (HTTP 429)"
 
 
 @pytest.mark.parametrize("legacy_json_null", [False, True])

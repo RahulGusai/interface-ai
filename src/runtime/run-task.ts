@@ -1,6 +1,7 @@
 import { verifyProposal, type DiscoveryContext } from "./discovery-context.js";
 import { recordDurableTarget, recordingHint } from "./target-recorder.js";
 import type { Capture } from "../contracts/observation.js";
+import { SafeError } from "../contracts/errors.js";
 import {
   agentTurnSchema,
   runResultSchema,
@@ -364,6 +365,7 @@ export async function runTask(
       emit({ type: "model_turn", index: ++index });
       modelTurn = index;
       let turn;
+      const providerStarted = performance.now();
       try {
         turn = agentTurnSchema.parse(
           await deps.model.complete(
@@ -372,13 +374,24 @@ export async function runTask(
             { signal: options.signal },
           ),
         );
-      } catch {
+      } catch (cause) {
+        options.signal?.throwIfAborted();
+        const error =
+          cause instanceof SafeError
+            ? { code: cause.code, message: cause.message }
+            : {
+                code: "PROVIDER_ERROR",
+                message: "Provider request or protocol failed",
+              };
+        await audit({
+          type: "provider_failed",
+          modelTurn,
+          error,
+          elapsedMs: Math.round(performance.now() - providerStarted),
+        });
         return await stop(
-          result("provider_error", "Provider request or protocol failed", {
-            error: {
-              code: "PROVIDER_ERROR",
-              message: "Provider request or protocol failed",
-            },
+          result("provider_error", error.message, {
+            error,
           }),
         );
       }

@@ -113,6 +113,10 @@ class Lifecycle:
                     code = (
                         "RUNTIME_STOPPED_REQUIRES_HUMAN"
                         if runtime["status"] == "needs_intervention"
+                        else runtime.get("error", {}).get(
+                            "code", "PROVIDER_ERROR"
+                        )
+                        if runtime["status"] == "provider_error"
                         else runtime["status"].upper()
                     )
                     await asyncio.to_thread(
