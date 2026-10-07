@@ -39,27 +39,39 @@ class Database:
             fcntl.flock(lock, fcntl.LOCK_EX)
             with self.connect() as conn:
                 version = conn.execute("PRAGMA user_version").fetchone()[0]
-                if version > 1:
+                if version > 2:
                     raise ValueError("Database schema is newer than this application")
                 conn.execute("PRAGMA journal_mode=WAL")
-            if version == 0:
-                sql = (
-                    Path(__file__).parent / "migrations/0001_initial.sql"
-                ).read_text()
-                with self.transaction() as conn:
-                    statement = ""
-                    for line in sql.splitlines(keepends=True):
-                        statement += line
-                        if sqlite3.complete_statement(statement):
-                            conn.execute(statement)
-                            statement = ""
-                    if statement.strip():
-                        raise ValueError("Incomplete migration SQL")
-                    conn.execute("PRAGMA user_version=1")
-            with self.connect() as conn:
-                if (
-                    conn.execute("PRAGMA integrity_check").fetchone()[0] != "ok"
-                    or conn.execute("PRAGMA foreign_key_check").fetchall()
-                ):
-                    raise ValueError("Database integrity check failed")
-        return 1
+            with self._lock, self.connect() as conn:
+                # Table rebuilds must retain the existing cyclic foreign keys.
+                # Disable enforcement only on this migration connection, before
+                # the transaction, and check all references before committing.
+                conn.execute("PRAGMA foreign_keys=OFF")
+                conn.execute("BEGIN IMMEDIATE")
+                try:
+                    migrations = ("0001_initial.sql", "0002_nullable_json.sql")
+                    for index in range(version, len(migrations)):
+                        sql = (
+                            Path(__file__).parent / "migrations" / migrations[index]
+                        ).read_text()
+                        statement = ""
+                        for line in sql.splitlines(keepends=True):
+                            statement += line
+                            if sqlite3.complete_statement(statement):
+                                conn.execute(statement)
+                                statement = ""
+                        if statement.strip():
+                            raise ValueError("Incomplete migration SQL")
+                        conn.execute(f"PRAGMA user_version={index + 1}")
+                    if (
+                        conn.execute("PRAGMA integrity_check").fetchone()[0] != "ok"
+                        or conn.execute("PRAGMA foreign_key_check").fetchall()
+                    ):
+                        raise ValueError("Database integrity check failed")
+                    conn.commit()
+                except BaseException:
+                    conn.rollback()
+                    raise
+                finally:
+                    conn.execute("PRAGMA foreign_keys=ON")
+        return 2

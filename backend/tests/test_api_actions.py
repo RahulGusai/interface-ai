@@ -1,5 +1,6 @@
 import asyncio
 import json
+import sqlite3
 from uuid import uuid4
 
 import pytest
@@ -43,7 +44,32 @@ def settings(tmp_path):
     )
 
 
-def test_starts_idempotency_http_contract_and_real_reads(tmp_path):
+@pytest.mark.parametrize("legacy_json_null", [False, True])
+def test_starts_idempotency_http_contract_and_real_reads(
+    tmp_path, monkeypatch, request, legacy_json_null
+):
+    if legacy_json_null:
+        # SQLite on Debian Bookworm returns 0 for json_valid(SQL NULL).
+        connect = sqlite3.connect
+        validator = connect(":memory:", check_same_thread=False)
+        request.addfinalizer(validator.close)
+
+        def legacy_connect(*args, **kwargs):
+            conn = connect(*args, **kwargs)
+            conn.create_function(
+                "json_valid",
+                1,
+                lambda value: (
+                    0
+                    if value is None
+                    else validator.execute("SELECT json_valid(?)", (value,)).fetchone()[
+                        0
+                    ]
+                ),
+            )
+            return conn
+
+        monkeypatch.setattr(sqlite3, "connect", legacy_connect)
     sdk = SDK()
     app = create_app(settings(tmp_path), Storage("private", sdk, sdk), FailedRunner())
     with TestClient(app) as client:

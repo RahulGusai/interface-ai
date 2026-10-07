@@ -36,7 +36,7 @@ def restore(db: Database, source: Path):
         with sqlite3.connect(f"file:{source.resolve()}?mode=ro", uri=True) as candidate:
             if (
                 candidate.execute("PRAGMA integrity_check").fetchone()[0] != "ok"
-                or candidate.execute("PRAGMA user_version").fetchone()[0] != 1
+                or candidate.execute("PRAGMA user_version").fetchone()[0] not in (1, 2)
                 or candidate.execute("PRAGMA foreign_key_check").fetchall()
             ):
                 raise ValueError("Invalid backup")
