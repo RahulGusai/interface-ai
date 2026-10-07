@@ -1,5 +1,5 @@
 import type { AssistantMessage } from "../contracts/run.js";
-import type { ImageContent } from "../contracts/observation.js";
+import type { ImageContent, Observation } from "../contracts/observation.js";
 import type { ToolResult } from "../contracts/tools.js";
 import { SafeError } from "../contracts/errors.js";
 export type InternalMessage =
@@ -60,7 +60,15 @@ export class ConversationHistory {
   }
 }
 const initialObservationPrefix = "UNTRUSTED initial UI observation: ";
-function recordedResult(message: InternalMessage): any {
+// Provider-only outcomes may omit historical observation payloads. Canonical tool
+// results still use the strict ToolResult schemas and retain complete captures.
+type HistoricalOutcome<T = ToolResult> = T extends { observation: Observation }
+  ? Omit<T, "observation">
+  : T extends { status: "ok" }
+    ? Pick<T, "status">
+    : T;
+export type ProviderToolResult = ToolResult | HistoricalOutcome;
+function recordedResult(message: InternalMessage): ToolResult | undefined {
   const content =
     message.role === "tool"
       ? message.content
@@ -70,54 +78,43 @@ function recordedResult(message: InternalMessage): any {
         : undefined;
   if (content === undefined) return undefined;
   try {
-    return JSON.parse(content);
+    return JSON.parse(content) as ToolResult;
   } catch {
     return undefined;
   }
 }
-function observationOf(result: any): any {
-  return (
-    result?.observation ??
-    (result?.status === "ok" && typeof result.observation_id === "string"
+function observationOf(
+  result: ToolResult | undefined,
+): Observation | undefined {
+  if (!result) return undefined;
+  return "observation" in result
+    ? result.observation
+    : result.status === "ok"
       ? result
-      : undefined)
-  );
+      : undefined;
 }
 function projectResult(
-  result: any,
+  result: ToolResult,
   currentObservationId: string | undefined,
-): any {
+): ProviderToolResult {
   const observation = observationOf(result);
+  if (!observation) return result;
   if (
-    observation?.status !== "ok" ||
+    observation.status === "ok" &&
     observation.observation_id === currentObservationId
   )
     return result;
-  const { controls, screenshot: _screenshot, ...summary } = observation;
-  const visibleText = new Set<string>();
-  const inputValues = new Map<string, { name: string; value: string }>();
-  for (const control of controls?.items ?? []) {
-    // Preserve observed facts, including empty-search results, without retaining
-    // obsolete references, coordinates, ancestry or duplicate container text.
-    const text = control.text || control.name || "";
-    for (const line of text.split("\n")) {
-      const trimmed = line.trim();
-      if (trimmed) visibleText.add(trimmed);
-    }
-    if (typeof control.value === "string") {
-      const value = { name: control.name, value: control.value };
-      inputValues.set(JSON.stringify(value), value);
-    }
+  if ("observation" in result) {
+    const { observation: _observation, ...outcome } = result;
+    return outcome;
   }
-  summary.visible_text = [...visibleText];
-  summary.input_values = [...inputValues.values()];
-  summary.context_note =
-    "Historical observation: visible text and input values are past facts, not current targeting data. Controls and screenshot omitted; these references must not be reused. Call observe_ui for fresh references.";
-  return result.observation ? { ...result, observation: summary } : summary;
+  // A historical observe_ui success has no separate outcome fields. Keep its
+  // status to pair the result with the assistant call without retaining UI data.
+  return result.status === "ok" ? { status: "ok" } : result;
 }
 export function projectMessages(messages: InternalMessage[]): unknown[] {
   // Keep the canonical history and audit intact. Only the provider projection drops
-  // obsolete captures, whose references are unusable after the next observation.
+  // obsolete captures; durable facts remain in explicit structured tool outcomes.
   let currentObservationId: string | undefined;
   for (const message of messages) {
     if (message.role === "observation")
@@ -129,8 +126,10 @@ export function projectMessages(messages: InternalMessage[]): unknown[] {
         currentObservationId =
           observation.status === "ok" ? observation.observation_id : undefined;
       if (
-        result?.code === "STALE_OBSERVATION" ||
-        result?.code === "CAPTURE_FAILED"
+        result &&
+        "code" in result &&
+        (result.code === "STALE_OBSERVATION" ||
+          result.code === "CAPTURE_FAILED")
       )
         currentObservationId = undefined;
     }
@@ -178,6 +177,12 @@ export function projectMessages(messages: InternalMessage[]): unknown[] {
       });
     } else {
       const recorded = recordedResult(m);
+      if (
+        m.role === "user" &&
+        recorded?.status === "ok" &&
+        recorded.observation_id !== currentObservationId
+      )
+        continue;
       const projected = recorded
         ? projectResult(recorded, currentObservationId)
         : recorded;

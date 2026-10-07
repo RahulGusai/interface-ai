@@ -1,160 +1,324 @@
 import { validateToolResponse } from "../../src/runtime/tool-response.js";
 import { it, expect } from "vitest";
 import { ConversationHistory } from "../../src/runtime/history.js";
+import type {
+  Observation,
+  ImageContent,
+} from "../../src/contracts/observation.js";
+import type { ToolResult, ToolName } from "../../src/contracts/tools.js";
+import { createFileAudit, type AuditRecord } from "../../src/runtime/audit.js";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { syntheticContract } from "../../src/demo/synthetic-contract.js";
 import { finalize } from "../../src/runtime/finalization.js";
 import { convertNumber } from "../../src/adapters/browser/extraction.js";
-it("retains historical empty-search evidence and input values after clearing the form without expired targeting data", () => {
-  const h = new ConversationHistory([]);
-  const capture = (id: string, items: any[]) => ({
-    status: "ok" as const,
-    observation_id: id,
-    captured_at: new Date().toISOString(),
-    surface: { id: "s", kind: "browser" as const, title: "Customer Search" },
-    controls: { status: "available" as const, items },
-    screenshot: { status: "not_requested" as const },
-  });
-  h.appendUserObservation(
-    capture("search-result", [
+const capture = (id: string): Observation => ({
+  status: "ok",
+  observation_id: id,
+  captured_at: "2026-10-08T00:00:00.000Z",
+  surface: {
+    id: "s",
+    kind: "browser",
+    title: `Page ${id}`,
+    url: `https://example.test/${id}`,
+  },
+  controls: {
+    status: "available",
+    items: [
       {
-        ref: "old-name",
+        ref: `${id}-input`,
         role: "textbox",
-        name: "Customer name",
-        text: "",
+        name: "Customer",
         value: "Freya Ferreira",
         state: {},
       },
       {
-        ref: "old-results",
+        ref: `${id}-text`,
         role: "status",
         name: "Results",
-        text: "(0 customers)\nNo customers match these criteria.",
-        state: {},
-      },
-      {
-        ref: "duplicate",
-        role: "text",
-        name: "No customers match these criteria.",
         text: "No customers match these criteria.",
         state: {},
       },
-      {
-        ref: "seed",
-        role: "text",
-        name: "Fixture seed 1001",
-        text: "Fixture seed 1001",
-        state: {},
-      },
-    ]),
-  );
+    ],
+  },
+  screenshot: { status: "available", image_ref: id, width: 1, height: 1 },
+});
+const image = (id: string): ImageContent => ({
+  ref: id,
+  mimeType: "image/png",
+  bytes: new Uint8Array([1, 2, 3]),
+});
+const appendResult = (
+  h: ConversationHistory,
+  id: string,
+  name: ToolName,
+  result: ToolResult,
+) => {
   h.appendAssistantToolCalls({
     role: "assistant",
     content: null,
-    tool_calls: [{ id: "clear", name: "click", argumentsJson: "{}" }],
+    tool_calls: [{ id, name, argumentsJson: "{}" }],
   });
-  h.appendToolResult("clear", {
-    status: "completed",
-    observation: capture("cleared", []),
-  });
-  const original = JSON.stringify(h.messages);
-  const projected = h.toOpenRouterMessages() as { content: string }[];
-  const historical = JSON.parse(
-    projected[0]!.content.split("UNTRUSTED initial UI observation: ")[1]!,
-  );
-  expect(historical.visible_text).toContain(
-    "No customers match these criteria.",
-  );
-  expect(
-    historical.visible_text.filter(
-      (s: string) => s === "No customers match these criteria.",
-    ),
-  ).toHaveLength(1);
-  expect(historical.visible_text).toContain("Fixture seed 1001");
-  expect(historical.input_values).toEqual([
-    { name: "Customer name", value: "Freya Ferreira" },
+  h.appendToolResult(id, result);
+};
+const toolResults = (h: ConversationHistory) =>
+  (
+    h.toOpenRouterMessages() as {
+      role: string;
+      content: string;
+      tool_call_id?: string;
+    }[]
+  )
+    .filter((m) => m.role === "tool")
+    .map((m) => ({ id: m.tool_call_id, result: JSON.parse(m.content) }));
+
+it("removes historical bootstrap observations and images while retaining the latest capture exactly", () => {
+  const h = new ConversationHistory([
+    { role: "user", content: "Find customer" },
   ]);
-  expect(historical.controls).toBeUndefined();
-  expect(JSON.stringify(historical)).not.toContain("old-name");
-  expect(JSON.stringify(h.messages)).toBe(original);
-});
-it("projects only current controls and screenshot while retaining tool outcomes and full internal history", () => {
-  const h = new ConversationHistory([]);
-  for (const id of ["a", "b"]) {
-    const calls = [
-      { id, name: "observe_ui", argumentsJson: '{"mode":"both"}' },
-    ];
-    h.appendAssistantToolCalls({
-      role: "assistant",
-      content: null,
-      tool_calls: calls,
-    });
-    h.appendToolResult(id, {
-      status: "ok",
-      observation_id: id,
-      captured_at: new Date().toISOString(),
-      surface: { id: "s", kind: "browser", title: id },
-      controls: {
-        status: "available",
-        items: [{ ref: id, role: "text", name: id, state: {} }],
-      },
-      screenshot: { status: "available", image_ref: id, width: 1, height: 1 },
-    });
-    h.appendObservationImage(
-      { ref: id, mimeType: "image/png", bytes: new Uint8Array([1]) },
-      id,
-      id,
-    );
-  }
+  h.appendUserObservation(capture("old"));
+  h.appendObservationImage(image("old"), "old", "bootstrap");
+  const latest = capture("latest");
+  appendResult(h, "latest", "observe_ui", latest);
+  h.appendObservationImage(image("latest"), "latest", "latest");
   const before = JSON.stringify(h.messages);
   const projected = h.toOpenRouterMessages() as {
     role: string;
-    content: any;
-    tool_call_id?: string;
+    content: unknown;
   }[];
-  const results = projected.filter((m) => m.role === "tool");
-  expect(results.map((m) => m.tool_call_id)).toEqual(["a", "b"]);
-  expect(JSON.parse(results[0]!.content)).toMatchObject({
-    status: "ok",
-    observation_id: "a",
-    context_note: expect.stringContaining("Historical"),
+  expect(projected.map((m) => m.role)).toEqual([
+    "user",
+    "assistant",
+    "tool",
+    "user",
+  ]);
+  expect(projected[0]).toEqual({ role: "user", content: "Find customer" });
+  expect(projected[2]!.content).toBe(JSON.stringify(latest));
+  expect(projected[3]).toEqual({
+    role: "user",
+    content: [
+      {
+        type: "text",
+        text: "UNTRUSTED UI image; observation_id=latest; preceding_call_id=latest; image_ref=latest",
+      },
+      { type: "image_url", image_url: { url: "data:image/png;base64,AQID" } },
+    ],
   });
-  expect(JSON.parse(results[0]!.content).controls).toBeUndefined();
-  expect(JSON.parse(results[1]!.content).controls.items[0].ref).toBe("b");
-  const images = projected.filter((m) => m.role === "user");
-  expect(images).toHaveLength(1);
-  expect(JSON.stringify(images[0])).toContain("observation_id=b");
+  expect(JSON.stringify(projected)).not.toContain("old");
   expect(JSON.stringify(h.messages)).toBe(before);
 });
-it("omits obsolete initial UI detail while retaining extracted data and verification", () => {
+
+it("keeps the bootstrap capture complete while it is current", () => {
   const h = new ConversationHistory([]);
-  const capture = (id: string) => ({
-    status: "ok" as const,
-    observation_id: id,
-    captured_at: new Date().toISOString(),
-    surface: { id: "s", kind: "browser" as const, title: "Desk" },
-    controls: { status: "available" as const, items: [] },
-    screenshot: { status: "not_requested" as const },
-  });
-  h.appendUserObservation({ status: "completed", observation: capture("old") });
-  const calls = [{ id: "x", name: "extract_data", argumentsJson: "{}" }];
-  h.appendAssistantToolCalls({
-    role: "assistant",
-    content: null,
-    tool_calls: calls,
-  });
-  h.appendToolResult("x", {
+  const current = capture("bootstrap");
+  h.appendUserObservation(current);
+  h.appendObservationImage(image("bootstrap"), "bootstrap", "bootstrap");
+  const projected = h.toOpenRouterMessages() as { content: unknown }[];
+  expect(projected[0]!.content).toBe(
+    `UNTRUSTED initial UI observation: ${JSON.stringify(current)}`,
+  );
+  expect(projected).toHaveLength(2);
+});
+
+it("retains the bootstrap navigation outcome when its nested observation becomes historical", () => {
+  const h = new ConversationHistory([]);
+  h.appendUserObservation({
     status: "completed",
-    observation: capture("new"),
-    fields: { balance: { status: "extracted", value: 25 } },
+    requested_url: "https://example.test/start",
+    final_url: "https://example.test/home",
+    observation: capture("old"),
   });
-  const projected = h.toOpenRouterMessages() as {
-    role: string;
-    content: string;
-  }[];
-  expect(projected[0]!.content).not.toContain('"controls"');
-  expect(JSON.parse(projected.at(-1)!.content).fields).toEqual({
-    balance: { status: "extracted", value: 25 },
+  appendResult(h, "latest", "observe_ui", capture("latest"));
+  const projected = h.toOpenRouterMessages() as { content: string }[];
+  expect(projected[0]!.content).toBe(
+    'UNTRUSTED initial UI observation: {"status":"completed","requested_url":"https://example.test/start","final_url":"https://example.test/home"}',
+  );
+});
+
+it("removes invalidated nested captures but keeps the failed action outcome", () => {
+  const h = new ConversationHistory([]);
+  appendResult(h, "old", "observe_ui", capture("old"));
+  h.appendObservationImage(image("old"), "old", "old");
+  appendResult(h, "failed", "click", {
+    status: "uncertain",
+    code: "CAPTURE_FAILED",
+    reason: "Click dispatched; capture unavailable",
+    observation: {
+      status: "error",
+      code: "CAPTURE_FAILED",
+      message: "Observe again",
+      retryable: true,
+    },
   });
+  expect(toolResults(h)).toEqual([
+    { id: "old", result: { status: "ok" } },
+    {
+      id: "failed",
+      result: {
+        status: "uncertain",
+        code: "CAPTURE_FAILED",
+        reason: "Click dispatched; capture unavailable",
+      },
+    },
+  ]);
+  expect(
+    (h.toOpenRouterMessages() as { role: string }[]).map((m) => m.role),
+  ).toEqual(["assistant", "tool", "assistant", "tool"]);
+});
+
+it("retains only the success outcome of a historical observe_ui result", () => {
+  const h = new ConversationHistory([]);
+  appendResult(h, "old", "observe_ui", capture("old"));
+  h.appendObservationImage(image("old"), "old", "old");
+  appendResult(h, "latest", "observe_ui", capture("latest"));
+  expect(toolResults(h)).toEqual([
+    { id: "old", result: { status: "ok" } },
+    { id: "latest", result: capture("latest") },
+  ]);
+  expect(JSON.stringify(h.toOpenRouterMessages())).not.toContain("old-input");
+});
+
+it.each([
+  [
+    "extract_data",
+    {
+      status: "partial",
+      fields: {
+        customer: { status: "extracted", value: " Freya\nFerreira " },
+        count: { status: "extracted", value: 0 },
+        missing: { status: "error", code: "NOT_FOUND", message: "No value" },
+      },
+      reason: "One missing field",
+    },
+  ],
+  [
+    "check_ui",
+    {
+      status: "evaluated",
+      verdict: "fail",
+      evidence: {
+        property: "text",
+        observed: "No customers match these criteria.",
+      },
+    },
+  ],
+  ["type_text", { status: "completed", verification: "matched" }],
+  ["scroll", { status: "completed", movement: "no_movement" }],
+  [
+    "select_option",
+    { status: "completed", verification: "matched", selected_label: "Active" },
+  ],
+  [
+    "navigate",
+    {
+      status: "completed",
+      requested_url: "https://example.test",
+      final_url: "https://example.test/home",
+    },
+  ],
+  ["wait_for", { status: "timed_out", elapsed_ms: 100, reason: "No match" }],
+  [
+    "click",
+    {
+      status: "uncertain",
+      code: "ACTION_UNCERTAIN",
+      reason: "Dispatched",
+      blocker: { kind: "dialog", message: "Confirm?" },
+      dialog_events: [
+        {
+          type: "confirm",
+          message: "Confirm?",
+          decision: "accept",
+          action: "accepted",
+        },
+      ],
+    },
+  ],
+] as const)(
+  "preserves historical %s outcome fields exactly without its observation",
+  (name, outcome) => {
+    const h = new ConversationHistory([]);
+    const result = validateToolResponse(name, {
+      result: { ...outcome, observation: capture("old") } as ToolResult,
+      image: image("old"),
+    }).result;
+    appendResult(h, "old", name, result);
+    h.appendObservationImage(image("old"), "old", "old");
+    appendResult(h, "latest", "observe_ui", capture("latest"));
+    const original = JSON.stringify(h.messages);
+    expect(toolResults(h)[0]).toEqual({ id: "old", result: outcome });
+    expect(toolResults(h)[1]).toEqual({
+      id: "latest",
+      result: capture("latest"),
+    });
+    expect(JSON.stringify(h.messages)).toBe(original);
+    expect(() =>
+      validateToolResponse(name, { result: outcome as ToolResult }),
+    ).toThrow();
+  },
+);
+
+it("preserves current nested captures and non-observation errors/finalization outcomes exactly", () => {
+  const h = new ConversationHistory([]);
+  const latest: ToolResult = {
+    status: "completed",
+    fields: { name: { status: "extracted", value: "Freya" } },
+    observation: capture("latest"),
+  };
+  appendResult(h, "extract", "extract_data", latest);
+  const error: ToolResult = {
+    status: "error",
+    code: "INVALID_TOOL_CALL",
+    message: "Bad input",
+  };
+  appendResult(h, "error", "click", error);
+  const finish: ToolResult = {
+    status: "accepted",
+    outcome: "unable_to_complete",
+  };
+  appendResult(h, "finish", "finish_task", finish);
+  expect(toolResults(h)).toEqual([
+    { id: "extract", result: latest },
+    { id: "error", result: error },
+    { id: "finish", result: finish },
+  ]);
+});
+
+it("leaves persisted audit results and screenshots unchanged during provider projection", () => {
+  const directory = mkdtempSync(join(tmpdir(), "projection-audit-"));
+  const sink = createFileAudit(directory);
+  try {
+    const h = new ConversationHistory([]);
+    const old = capture("old");
+    appendResult(h, "old", "observe_ui", old);
+    h.appendObservationImage(image("old"), "old", "old");
+    const record: AuditRecord = {
+      type: "tool_finished",
+      modelTurn: 1,
+      call: { id: "old", name: "observe_ui", argumentsJson: '{"mode":"both"}' },
+      result: old,
+      elapsedMs: 1,
+    };
+    sink.write(record, image("old"));
+    appendResult(h, "latest", "observe_ui", capture("latest"));
+    const auditPath = join(directory, "audit.jsonl");
+    const before = readFileSync(auditPath);
+    const row = JSON.parse(before.toString());
+    expect(row.result).toEqual(old);
+    const screenshot = readFileSync(join(directory, row.screenshot));
+    expect(screenshot).toEqual(Buffer.from([1, 2, 3]));
+    const historyBefore = JSON.stringify(h.messages);
+    expect(toolResults(h)[0]!.result).toEqual({ status: "ok" });
+    expect(h.toOpenRouterMessages()).toEqual(h.toOpenRouterMessages());
+    expect(JSON.stringify(h.messages)).toBe(historyBefore);
+    expect(record.result).toEqual(old);
+    expect(readFileSync(auditPath)).toEqual(before);
+    expect(readFileSync(join(directory, row.screenshot))).toEqual(screenshot);
+  } finally {
+    sink.close();
+    rmSync(directory, { recursive: true });
+  }
 });
 it.each(["STALE_OBSERVATION", "CAPTURE_FAILED"])(
   "does not expose expired controls or images after %s",
@@ -193,7 +357,7 @@ it.each(["STALE_OBSERVATION", "CAPTURE_FAILED"])(
       content: any;
     }[];
     expect(projected.filter((m) => Array.isArray(m.content))).toHaveLength(0);
-    expect(projected[0]!.content).not.toContain('"controls"');
+    expect(projected.map((m) => m.role)).toEqual(["assistant", "tool"]);
     expect(JSON.parse(projected.at(-1)!.content).code).toBe(code);
   },
 );
@@ -209,13 +373,10 @@ it("keeps tool-result batches contiguous while pairing each image with its call 
     content: null,
     tool_calls: calls,
   });
-  h.appendToolResult("a", { status: "error", code: "X", message: "x" });
-  h.appendObservationImage(
-    { ref: "i", mimeType: "image/png", bytes: new Uint8Array([1]) },
-    "o",
-    "a",
-  );
-  h.appendToolResult("b", { status: "error", code: "X", message: "x" });
+  h.appendToolResult("a", capture("a"));
+  h.appendObservationImage(image("a"), "a", "a");
+  h.appendToolResult("b", capture("b"));
+  h.appendObservationImage(image("b"), "b", "b");
   const projected = h.toOpenRouterMessages() as {
     role: string;
     content: unknown;
@@ -226,7 +387,7 @@ it("keeps tool-result batches contiguous while pairing each image with its call 
     "tool",
     "user",
   ]);
-  expect(JSON.stringify(projected.at(-1))).toContain("preceding_call_id=a");
+  expect(JSON.stringify(projected.at(-1))).toContain("preceding_call_id=b");
   expect(() =>
     h.appendAssistantToolCalls({
       role: "assistant",
