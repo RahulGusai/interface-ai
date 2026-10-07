@@ -11,7 +11,6 @@ import type {
   BrowserAdapterFactory,
   BrowserAdapterPort,
 } from "../adapters/surface.js";
-import type { RuntimePolicy } from "../runtime/policy.js";
 import { dispatchTool, type DispatchContext } from "../runtime/dispatch.js";
 import { parseToolAction } from "../contracts/tools.js";
 import type { Capture, ImageContent } from "../contracts/observation.js";
@@ -40,7 +39,7 @@ export async function runReplay(
     StartCommand,
     "artifact" | "inputs" | "deployment" | "assets" | "staging_directory"
   >,
-  deps: { adapterFactory: BrowserAdapterFactory; policy: RuntimePolicy },
+  deps: { adapterFactory: BrowserAdapterFactory },
   options: { signal?: AbortSignal; onAudit: ReplayAudit },
 ): Promise<ReplayResult> {
   let adapter: BrowserAdapterPort | undefined;
@@ -94,16 +93,12 @@ export async function runReplay(
         throw Error("REFERENCE_HASH_MISMATCH");
       assets.set(a.asset_id, bytes);
     }
-    adapter = await deps.adapterFactory.createForTask(
-      {
-        goal: "Execute pinned artifact",
-        targetUrl: command.deployment.base_url,
-      },
-      deps.policy,
-    );
+    adapter = await deps.adapterFactory.createForTask({
+      goal: "Execute pinned artifact",
+      targetUrl: command.deployment.base_url,
+    });
     const context: DispatchContext = {
       adapter,
-      policy: deps.policy,
       busy: false,
       halted: false,
     };

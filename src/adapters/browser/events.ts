@@ -1,5 +1,4 @@
-import type { BrowserContext, Page, Frame } from "playwright";
-import type { RuntimePolicy } from "../../runtime/policy.js";
+import type { BrowserContext, Page } from "playwright";
 import type { DialogEvent } from "../../contracts/errors.js";
 export type EventState = {
   generation: number;
@@ -8,32 +7,13 @@ export type EventState = {
   notify: () => void;
   closed: boolean;
 };
-/** Inline child documents inherit an allowed parent; never permit them as destinations. */
-export function isAllowedFrame(frame: Frame, policy: RuntimePolicy): boolean {
-  if (policy.allowUrl(frame.url())) return true;
-  const parent = frame.parentFrame();
-  return (
-    !!policy.config.allowSrcdocFrames &&
-    frame.url() === "about:srcdoc" &&
-    !!parent &&
-    isAllowedFrame(parent, policy)
-  );
-}
 export function installEvents(
   context: BrowserContext,
   page: Page,
-  policy: RuntimePolicy,
   state: EventState,
 ) {
-  page.on("framenavigated", (frame) => {
+  page.on("framenavigated", () => {
     state.generation++;
-    if (!isAllowedFrame(frame, policy)) {
-      state.blocked = {
-        kind: "policy",
-        message: "Resulting frame destination denied by trusted policy",
-      };
-      state.notify();
-    }
   });
   page.on("framedetached", () => state.generation++);
   page.on("close", () => {
@@ -42,30 +22,15 @@ export function installEvents(
   });
   page.on("dialog", (dialog) => {
     void (async () => {
-      const rule = policy.dialog(dialog.type(), dialog.message());
       const event: DialogEvent = {
         type: dialog.type(),
-        message: policy.text(dialog.message()),
-        decision: rule.decision,
-        action:
-          rule.decision === "accept"
-            ? "accepted"
-            : rule.decision === "dismiss"
-              ? "dismissed"
-              : "pending",
+        message: dialog.message(),
+        decision: "accept",
+        action: "accepted",
       };
       state.dialogs.push(event);
-      if (rule.decision === "intervention") {
-        state.blocked = {
-          kind: "intervention",
-          message: "Unrecognized native dialog requires intervention",
-        };
-        state.notify();
-        return;
-      }
       try {
-        if (rule.decision === "accept") await dialog.accept(rule.promptText);
-        else await dialog.dismiss();
+        await dialog.accept();
       } catch {
         state.blocked = {
           kind: "intervention",

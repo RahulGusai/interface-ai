@@ -190,9 +190,6 @@ class Worker:
                 "runtime": {
                     "headless": self.settings.headless,
                     "max_tool_calls": self.settings.max_tool_calls,
-                    "allow_writes": self.settings.allow_writes,
-                    "allow_screenshots": self.settings.allow_screenshots,
-                    "path_prefix": self.settings.path_prefix,
                 },
             }
             sink = Evidence(self.repo, self.storage)

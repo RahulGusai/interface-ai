@@ -2,7 +2,6 @@ import { it, expect } from "vitest";
 import { readFile } from "node:fs/promises";
 import { startFixture } from "../helpers/fixture-server.js";
 import { createBrowserFactory } from "../../src/adapters/factory.js";
-import { syntheticPolicy } from "../../src/runtime/policy.js";
 import { runReplay } from "../../src/replay/run-replay.js";
 const definition = JSON.parse(
   await readFile(
@@ -40,7 +39,6 @@ it("replays two inputs and returns not-found before the missing link without a m
         },
         {
           adapterFactory: createBrowserFactory({ headless: true }),
-          policy: syntheticPolicy(fixture.url),
         },
         {
           onAudit: async (type, payload, image, step_id) => {
@@ -90,7 +88,6 @@ it("duplicate target stops before Search dispatch and persists fresh failure evi
       },
       {
         adapterFactory: createBrowserFactory({ headless: true }),
-        policy: syntheticPolicy(fixture.url),
       },
       {
         onAudit: async (type, payload, image, step_id) => {

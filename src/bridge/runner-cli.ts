@@ -5,8 +5,6 @@ import { startSchema, MAX_LINE } from "./protocol.js";
 import { Transport } from "./transport.js";
 import { stageImage } from "./staging.js";
 import { createBrowserFactory } from "../adapters/factory.js";
-import { RuntimePolicy } from "../runtime/policy.js";
-import { toolSchemas, type ToolName } from "../contracts/tools.js";
 import { OpenRouterClient } from "../llm/openrouter-client.js";
 import { runTask } from "../runtime/run-task.js";
 import type { ImageContent } from "../contracts/observation.js";
@@ -43,30 +41,13 @@ lines.on("line", (line) => {
 });
 async function execute(c: ReturnType<typeof startSchema.parse>) {
   await transport!.send("ready");
-  const origin = new URL(c.deployment.base_url).origin;
-  const reads: ToolName[] = [
-    "observe_ui",
-    "navigate",
-    "wait_for",
-    "check_ui",
-    "extract_data",
-    "request_human",
-    "finish_task",
-  ];
-  const policy = new RuntimePolicy({
-    documents: [{ origin, pathPrefix: c.runtime.path_prefix }],
-    resourceOrigins: [origin],
-    allowedActions: c.runtime.allow_writes
-      ? (Object.keys(toolSchemas) as ToolName[])
-      : reads,
-    allowScreenshots: c.runtime.allow_screenshots,
-    riskyAction: () => "allow",
-    validateOutputs: (outputs) =>
+  const contract = {
+    validateOutputs: (outputs: Record<string, unknown>) =>
       Object.values(outputs).every((v) =>
         ["string", "number", "boolean"].includes(typeof v),
       ),
     businessCodes: ["not_found"],
-  });
+  };
   const factory = createBrowserFactory({ headless: c.runtime.headless });
   const emit = async (
     type: string,
@@ -138,7 +119,7 @@ async function execute(c: ReturnType<typeof startSchema.parse>) {
     });
     result = await runTask(
       { goal: c.task, targetUrl: c.deployment.base_url },
-      { model, adapterFactory: factory, policy },
+      { model, adapterFactory: factory, contract },
       {
         discovery,
         signal: controller.signal,
@@ -169,7 +150,7 @@ async function execute(c: ReturnType<typeof startSchema.parse>) {
     const { runReplay } = await import(modulePath);
     result = await runReplay(
       c,
-      { adapterFactory: factory, policy },
+      { adapterFactory: factory },
       { signal: controller.signal, onAudit: emit },
     );
   }

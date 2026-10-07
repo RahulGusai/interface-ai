@@ -7,7 +7,7 @@ import {
 import { randomUUID } from "node:crypto";
 import type { BrowserAdapterPort } from "../surface.js";
 import { browserDefaults, type BrowserOptions } from "../../runtime/config.js";
-import type { RuntimePolicy } from "../../runtime/policy.js";
+import { validateToolResponse } from "../../runtime/tool-response.js";
 import { SafeError } from "../../contracts/errors.js";
 import {
   toolResultSchemas,
@@ -26,8 +26,7 @@ import { click, typeText, pressKey, selectOption } from "./input.js";
 import { scroll } from "./scroll.js";
 import { evaluateCondition } from "./conditions.js";
 import { readProperty, convertNumber } from "./extraction.js";
-import { installEvents, isAllowedFrame, type EventState } from "./events.js";
-import { installNavigationGuard } from "./navigation.js";
+import { installEvents, type EventState } from "./events.js";
 const failedObservation = (): Observation => ({
   status: "error",
   code: "CAPTURE_FAILED",
@@ -55,7 +54,6 @@ export class BrowserAdapter implements BrowserAdapterPort {
   private busy = false;
   private poisoned = false;
   private pending: Promise<unknown> | undefined;
-  private readonly links = new Set<string>();
   private readonly state: EventState = {
     generation: 0,
     dialogs: [],
@@ -66,13 +64,9 @@ export class BrowserAdapter implements BrowserAdapterPort {
     private readonly browser: Browser,
     private readonly context: BrowserContext,
     private readonly page: Page,
-    private readonly policy: RuntimePolicy,
     private readonly options: BrowserOptions,
   ) {}
-  static async create(
-    policy: RuntimePolicy,
-    options: Partial<BrowserOptions> = {},
-  ) {
+  static async create(options: Partial<BrowserOptions> = {}) {
     const config = { ...browserDefaults, ...options };
     const browser = await chromium.launch({
       headless: config.headless,
@@ -82,21 +76,14 @@ export class BrowserAdapter implements BrowserAdapterPort {
       const context = await browser.newContext({
         viewport: config.viewport,
         deviceScaleFactor: config.deviceScaleFactor,
-        serviceWorkers: "block",
-        acceptDownloads: false,
+        serviceWorkers: "allow",
+        acceptDownloads: true,
       });
       const page = await context.newPage();
       page.setDefaultTimeout(config.actionMs);
       page.setDefaultNavigationTimeout(config.navigationMs);
-      const adapter = new BrowserAdapter(
-        browser,
-        context,
-        page,
-        policy,
-        config,
-      );
-      installEvents(context, page, policy, adapter.state);
-      await installNavigationGuard(context, policy, adapter.state);
+      const adapter = new BrowserAdapter(browser, context, page, config);
+      installEvents(context, page, adapter.state);
       return adapter;
     } catch (e) {
       await browser.close();
@@ -175,13 +162,7 @@ export class BrowserAdapter implements BrowserAdapterPort {
               timeout: this.options.captureMs,
             });
           }
-        if (
-          this.state.blocked ||
-          this.page
-            .frames()
-            .some((frame) => !isAllowedFrame(frame, this.policy))
-        )
-          throw new Error();
+        if (this.state.blocked) throw new Error();
         const generation = this.state.generation;
         const signature = await layoutSignature(this.page);
         let controls: Extract<Observation, { status: "ok" }>["controls"] = {
@@ -192,7 +173,6 @@ export class BrowserAdapter implements BrowserAdapterPort {
             const collected = await collectControls(this.page);
             fresh = collected.bindings;
             controls = { status: "available", items: collected.controls };
-            collected.links.forEach((u) => this.links.add(u));
           } else controls = { status: "unavailable" };
         }
         let image: Capture["image"];
@@ -200,20 +180,18 @@ export class BrowserAdapter implements BrowserAdapterPort {
           status: "not_requested",
         };
         if (mode !== "controls") {
-          if (this.policy.permitImages) {
-            const bytes = await this.page.screenshot({
-              type: "png",
-              scale: "css",
-              timeout: this.options.captureMs,
-            });
-            const ref = randomUUID();
-            image = { ref, mimeType: "image/png", bytes };
-            screenshot = {
-              status: "available",
-              image_ref: ref,
-              ...this.options.viewport,
-            };
-          } else screenshot = { status: "unavailable" };
+          const bytes = await this.page.screenshot({
+            type: "png",
+            scale: "css",
+            timeout: this.options.captureMs,
+          });
+          const ref = randomUUID();
+          image = { ref, mimeType: "image/png", bytes };
+          screenshot = {
+            status: "available",
+            image_ref: ref,
+            ...this.options.viewport,
+          };
         }
         if (
           generation !== this.state.generation ||
@@ -248,7 +226,10 @@ export class BrowserAdapter implements BrowserAdapterPort {
           screenshot,
           controls,
         };
-        return { observation: this.policy.sanitize(observation), image };
+        return {
+          observation,
+          image,
+        };
       } catch {
         await Promise.all(
           [...fresh.values()].map((b) => b.element.dispose().catch(() => {})),
@@ -267,14 +248,6 @@ export class BrowserAdapter implements BrowserAdapterPort {
           message: "Browser execution is halted",
         },
       };
-    if (this.policy.decide(action) !== "allow")
-      return {
-        result: {
-          status: "policy_blocked",
-          code: "POLICY_DECISION",
-          message: "Action denied",
-        },
-      };
     if (
       "observation_id" in action.input &&
       !this.isCurrentObservation(action.input.observation_id)
@@ -288,7 +261,7 @@ export class BrowserAdapter implements BrowserAdapterPort {
       };
     if (action.name === "observe_ui") {
       const c = await this.capture(action.input.mode);
-      return this.policy.project(action.name, {
+      return this.project(action.name, {
         result: c.observation,
         image: c.image,
       });
@@ -374,7 +347,7 @@ export class BrowserAdapter implements BrowserAdapterPort {
           : {}),
       };
       const result = toolResultSchemas[action.name].parse(raw);
-      return this.policy.project(action.name, {
+      return this.project(action.name, {
         result,
         image: "image" in capture ? capture.image : undefined,
       });
@@ -383,6 +356,9 @@ export class BrowserAdapter implements BrowserAdapterPort {
       this.state.notify = () => {};
       this.busy = false;
     }
+  }
+  private project(name: BrowserAction["name"], response: ToolResponse) {
+    return validateToolResponse(name, response);
   }
   private completeFields(
     action: BrowserAction,
@@ -393,7 +369,7 @@ export class BrowserAdapter implements BrowserAdapterPort {
       return {
         ...fields,
         requested_url: action.input.url,
-        final_url: this.policy.text(this.page.url()),
+        final_url: this.page.url(),
       };
     if (action.name === "type_text" || action.name === "select_option")
       return { verification: "unavailable", ...fields };
@@ -443,16 +419,6 @@ export class BrowserAdapter implements BrowserAdapterPort {
     generation: number,
   ): Promise<Record<string, unknown>> {
     if (action.name === "navigate") {
-      if (
-        this.page.url() !== "about:blank" &&
-        !this.links.has(action.input.url) &&
-        action.input.url !== this.page.url()
-      )
-        throw new SafeError(
-          "UNOBSERVED_URL",
-          "Destination must be the task URL or an observed link",
-        );
-      this.links.add(action.input.url);
       await this.page.goto(action.input.url, {
         waitUntil: "domcontentloaded",
         timeout: this.options.navigationMs,
@@ -510,17 +476,6 @@ export class BrowserAdapter implements BrowserAdapterPort {
             status: "error",
             code: "INVALID_NUMBER",
             message: "Expected a plain finite decimal",
-          };
-          continue;
-        }
-        if (
-          this.policy.config.allowField &&
-          !this.policy.config.allowField(field.name, converted)
-        ) {
-          fields[field.name] = {
-            status: "error",
-            code: "EXPOSURE_DENIED",
-            message: "Field exposure denied",
           };
           continue;
         }

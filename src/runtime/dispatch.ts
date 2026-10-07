@@ -1,13 +1,13 @@
 import { parseToolAction, type ToolResponse } from "../contracts/tools.js";
 import type { ToolCall } from "../contracts/run.js";
 import type { BrowserAdapterPort } from "../adapters/surface.js";
-import type { RuntimePolicy } from "./policy.js";
 import { requestIntervention } from "./intervention.js";
-import { finalize } from "./finalization.js";
+import { finalize, type TaskContract } from "./finalization.js";
+import { validateToolResponse } from "./tool-response.js";
 import { executeTool } from "../tools/registry.js";
 export type DispatchContext = {
   adapter: BrowserAdapterPort;
-  policy: RuntimePolicy;
+  contract?: TaskContract;
   busy: boolean;
   halted: boolean;
   interventionId?: string;
@@ -36,17 +36,6 @@ export async function dispatchTool(
         message: "Autonomous execution is unavailable",
       },
     };
-  const decision = context.policy.decide(action);
-  if (decision !== "allow") {
-    if (decision === "intervention") requestIntervention(context);
-    return {
-      result: {
-        status: decision === "deny" ? "policy_blocked" : "needs_intervention",
-        code: "POLICY_DECISION",
-        message: "Trusted policy did not allow this action",
-      },
-    };
-  }
   if (
     "observation_id" in action.input &&
     !context.adapter.isCurrentObservation(action.input.observation_id)
@@ -64,7 +53,9 @@ export async function dispatchTool(
       action.name === "request_human"
         ? { result: requestIntervention(context) }
         : action.name === "finish_task"
-          ? { result: finalize(action.input, context.policy) }
+          ? {
+              result: finalize(action.input, context.contract ?? {}),
+            }
           : await executeTool(context.adapter, action);
     if (
       response.result.status === "needs_intervention" ||
@@ -72,7 +63,7 @@ export async function dispatchTool(
         response.result.blocker?.kind === "intervention")
     )
       requestIntervention(context);
-    return context.policy.project(action.name, response);
+    return validateToolResponse(action.name, response);
   } catch {
     context.halted = true;
     return {

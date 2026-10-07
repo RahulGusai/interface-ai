@@ -1,7 +1,7 @@
 import { it, expect } from "vitest";
 import { readFile } from "node:fs/promises";
 import { runTask } from "../../src/runtime/run-task.js";
-import { syntheticPolicy } from "../../src/runtime/policy.js";
+import { syntheticContract } from "../../src/demo/synthetic-contract.js";
 import { createBrowserFactory } from "../../src/adapters/factory.js";
 import { startFixture } from "../helpers/fixture-server.js";
 import { lastObservation } from "../../src/demo/scripted-model.js";
@@ -138,7 +138,7 @@ it("accepts a parameterized observed plan and keeps inline observation bytes", a
       {
         model,
         adapterFactory: createBrowserFactory({ headless: true }),
-        policy: syntheticPolicy(fixture.url),
+        contract: syntheticContract(),
       },
       { discovery },
     );

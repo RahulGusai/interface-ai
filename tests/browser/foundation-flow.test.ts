@@ -1,6 +1,5 @@
 import { it, expect } from "vitest";
 import { BrowserAdapter } from "../../src/adapters/browser/browser-adapter.js";
-import { syntheticPolicy, RuntimePolicy } from "../../src/runtime/policy.js";
 import { dispatchTool } from "../../src/runtime/dispatch.js";
 import { startFixture } from "../helpers/fixture-server.js";
 import type { ToolResponse } from "../../src/contracts/tools.js";
@@ -20,9 +19,8 @@ const ctrl = (o: Extract<Observation, { status: "ok" }>, name: string) => {
 };
 it("real Chromium: semantic entry, single keyboard activation, check/extract, point fallback, selection, stale refs, scroll and dialogs", async () => {
   const fixture = await startFixture();
-  const policy = syntheticPolicy(fixture.url);
-  const a = await BrowserAdapter.create(policy, { headless: true });
-  const context = { adapter: a, policy, busy: false, halted: false };
+  const a = await BrowserAdapter.create({ headless: true });
+  const context = { adapter: a, busy: false, halted: false };
   let n = 0;
   const send = (name: string, input: unknown) =>
     dispatchTool(context, {
@@ -133,51 +131,21 @@ it("real Chromium: semantic entry, single keyboard activation, check/extract, po
       target: ctrl(o, "Unknown dialog"),
     });
     expect(r.result).toMatchObject({
-      status: "blocked",
-      blocker: { kind: "intervention" },
+      status: "completed",
+      dialog_events: [{ decision: "accept", action: "accepted" }],
     });
-    expect(context.halted).toBe(true);
+    expect(context.halted).toBe(false);
     expect((await send("observe_ui", { mode: "both" })).result.status).toBe(
-      "needs_intervention",
+      "ok",
     );
   } finally {
     await a.close();
     await fixture.close();
   }
 });
-it("guards direct, redirect and action navigation, suppresses sensitive exposure, supports screenshot-only scale-2 points", async () => {
+it("supports screenshot-only scale-2 points without suppressing images", async () => {
   const fixture = await startFixture();
-  const base = syntheticPolicy(fixture.url);
-  const policy = new RuntimePolicy({
-    ...base.config,
-    redactPatterns: ["SENSITIVE_MARKER"],
-  });
-  const a = await BrowserAdapter.create(policy, {
-    headless: true,
-    deviceScaleFactor: 2,
-    semanticCapture: false,
-  });
-  try {
-    const nav = await a.execute({
-      name: "navigate",
-      input: { url: fixture.url },
-    });
-    let o = observation(nav);
-    expect(o.controls.status).toBe("unavailable");
-    expect(o.screenshot.status).toBe("unavailable");
-    expect(JSON.stringify(nav)).not.toContain("SENSITIVE_MARKER");
-    expect(
-      (
-        await a.execute({
-          name: "navigate",
-          input: { url: fixture.url + "/redirect" },
-        })
-      ).result.status,
-    ).toBe("blocked");
-  } finally {
-    await a.close();
-  }
-  const b = await BrowserAdapter.create(base, {
+  const b = await BrowserAdapter.create({
     headless: true,
     deviceScaleFactor: 2,
     semanticCapture: false,

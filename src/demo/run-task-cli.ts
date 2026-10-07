@@ -3,9 +3,8 @@ import { runTask } from "../runtime/run-task.js";
 import { loadOpenRouterConfig } from "../runtime/config.js";
 import { OpenRouterClient } from "../llm/openrouter-client.js";
 import { createBrowserFactory } from "../adapters/factory.js";
-import { RuntimePolicy, syntheticPolicy } from "../runtime/policy.js";
+import { syntheticContract } from "./synthetic-contract.js";
 import { startFixture } from "../../tests/helpers/fixture-server.js";
-import type { ToolName } from "../contracts/tools.js";
 async function main() {
   const { values } = parseArgs({
     options: {
@@ -13,9 +12,6 @@ async function main() {
       url: { type: "string" },
       synthetic: { type: "boolean" },
       "max-tool-calls": { type: "string" },
-      "allow-writes": { type: "boolean" },
-      "allow-screenshots": { type: "boolean" },
-      "path-prefix": { type: "string" },
       headless: { type: "boolean" },
     },
   });
@@ -25,42 +21,11 @@ async function main() {
   const fixture = values.synthetic ? await startFixture() : undefined;
   try {
     const url = fixture?.url ?? values.url!;
-    const origin = new URL(url).origin;
-    const reads: ToolName[] = [
-      "observe_ui",
-      "navigate",
-      "check_ui",
-      "wait_for",
-      "extract_data",
-      "request_human",
-      "finish_task",
-    ];
-    const policy = fixture
-      ? syntheticPolicy(url)
-      : new RuntimePolicy({
-          documents: [{ origin, pathPrefix: values["path-prefix"] ?? "/" }],
-          resourceOrigins: [origin],
-          allowedActions: values["allow-writes"]
-            ? [
-                ...reads,
-                "click",
-                "type_text",
-                "press_key",
-                "scroll",
-                "select_option",
-              ]
-            : reads,
-          allowScreenshots: !!values["allow-screenshots"],
-          riskyAction: (action) =>
-            action.name === "navigate" || values["allow-writes"]
-              ? "allow"
-              : "intervention",
-        });
     const result = await runTask(
       { goal: values.goal, targetUrl: url },
       {
         model: new OpenRouterClient(config),
-        policy,
+        contract: fixture ? syntheticContract() : undefined,
         adapterFactory: createBrowserFactory({
           headless: !!values.headless,
           slowMo: values.headless ? 0 : 100,
@@ -82,9 +47,7 @@ async function main() {
       },
     );
     console.log(JSON.stringify(result));
-    if (
-      ["provider_error", "tool_error", "policy_blocked"].includes(result.status)
-    )
+    if (["provider_error", "tool_error"].includes(result.status))
       process.exitCode = 1;
   } finally {
     await fixture?.close();

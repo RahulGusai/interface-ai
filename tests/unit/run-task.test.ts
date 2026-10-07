@@ -1,7 +1,7 @@
 import { it, expect } from "vitest";
 import { runTask } from "../../src/runtime/run-task.js";
 import { makeFakeAdapter } from "../helpers/fake-adapter.js";
-import { syntheticPolicy } from "../../src/runtime/policy.js";
+import { syntheticContract } from "../../src/demo/synthetic-contract.js";
 import type { AgentTurn, ToolCall } from "../../src/contracts/run.js";
 import type { InternalMessage } from "../../src/runtime/history.js";
 const input = { goal: "Find member", targetUrl: "https://example.org/app" };
@@ -24,7 +24,7 @@ function setup(
     adapters,
     requests,
     deps: {
-      policy: syntheticPolicy(input.targetUrl),
+      contract: syntheticContract(),
       adapterFactory: {
         async createForTask() {
           const a = makeFakeAdapter();
@@ -44,6 +44,29 @@ function setup(
     },
   };
 }
+it("backend discovery needs no policy and bootstraps the deployment URL before clicking", async () => {
+  const s = setup([
+    batch([
+      call("customer-search", "click", {
+        observation_id: "obs_1",
+        target: { kind: "control", control_ref: "customer-search" },
+      }),
+    ]),
+    {
+      kind: "final_text",
+      text: "Stopped",
+      assistantMessage: { role: "assistant", content: "Stopped" },
+    },
+  ]);
+  const r = await runTask(input, s.deps);
+  expect(r.status).toBe("agent_stopped_unverified");
+  expect(s.adapters[0]?.calls).toMatchObject([
+    { name: "navigate", input: { url: input.targetUrl } },
+    { name: "click" },
+  ]);
+  expect(s.requests).toHaveLength(2);
+  expect(s.adapters[0]?.closed).toBe(true);
+});
 it("rejects oversized batches before execution, does not count bootstrap, closes one adapter", async () => {
   const s = setup([
     batch([
@@ -119,12 +142,16 @@ it("stops before next model call at budget and isolates invocations", async () =
   expect(s.adapters).toHaveLength(2);
   expect(s.requests).toHaveLength(2);
 });
-it("policy checks bootstrap before adapter creation and closes on provider error", async () => {
+it("opens the supplied URL and closes the adapter on provider error", async () => {
   const s = setup([]);
-  const r = await runTask({ ...input, targetUrl: "https://evil.org" }, s.deps);
-  expect(r.status).toBe("policy_blocked");
-  expect(s.adapters).toHaveLength(0);
-  expect((await runTask(input, s.deps)).status).toBe("provider_error");
+  const targetUrl = "https://other.example/app";
+  expect((await runTask({ ...input, targetUrl }, s.deps)).status).toBe(
+    "provider_error",
+  );
+  expect(s.adapters[0]?.calls[0]).toMatchObject({
+    name: "navigate",
+    input: { url: targetUrl },
+  });
   expect(s.adapters[0]?.closed).toBe(true);
 });
 it("sequential stale dependent references never reach browser", async () => {
@@ -148,7 +175,7 @@ it("sequential stale dependent references never reach browser", async () => {
     "click",
   ]);
 });
-it("sanitizes initial task context before provider projection", async () => {
+it("passes task context to the provider without policy redaction", async () => {
   const s = setup([
     {
       kind: "final_text",
@@ -156,44 +183,10 @@ it("sanitizes initial task context before provider projection", async () => {
       assistantMessage: { role: "assistant", content: "done" },
     },
   ]);
-  s.deps.policy.config.redactPatterns = ["PRIVATE_MARKER"];
   await runTask({ ...input, goal: "Find PRIVATE_MARKER" }, s.deps);
-  expect(JSON.stringify(s.requests)).not.toContain("PRIVATE_MARKER");
+  expect(JSON.stringify(s.requests)).toContain("PRIVATE_MARKER");
 });
-it("maps browser policy blocks immediately without another model request", async () => {
-  const s = setup([
-    batch([
-      call("a", "click", {
-        observation_id: "obs_1",
-        target: { kind: "control", control_ref: "c1" },
-      }),
-    ]),
-  ]);
-  const factory = s.deps.adapterFactory.createForTask;
-  s.deps.adapterFactory.createForTask = async () => {
-    const a = await factory();
-    const original = a.execute.bind(a);
-    a.execute = (async (action) =>
-      action.name === "click"
-        ? {
-            result: {
-              status: "blocked",
-              observation: {
-                status: "error",
-                code: "CAPTURE_FAILED",
-                message: "blocked",
-                retryable: false,
-              },
-              blocker: { kind: "policy", message: "Denied destination" },
-            },
-          }
-        : original(action)) as typeof a.execute;
-    return a;
-  };
-  expect((await runTask(input, s.deps)).status).toBe("policy_blocked");
-  expect(s.requests).toHaveLength(1);
-});
-it("reports the sanitized reason for an accepted human request", async () => {
+it("reports the reason for an accepted human request", async () => {
   const s = setup([
     batch([
       call("a", "request_human", {

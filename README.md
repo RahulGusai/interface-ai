@@ -17,7 +17,7 @@ cp .env.example .env
 
 Configure the existing private MinIO bucket's internal S3 endpoint, externally reachable S3 signing endpoint, region and server-only credentials. The service verifies the bucket and its policy; it creates no bucket. Read/catalog endpoints remain usable when model/storage configuration is absent; `/health/ready` reports separate discovery and replay availability. Missing configuration never enables a fake runner or local object-store fallback.
 
-For a permitted synthetic UI demo, set `INTERFACE_ALLOW_WRITES=true` and `INTERFACE_ALLOW_SCREENSHOTS=true` in the ignored server `.env`. These configure the existing runtime policy. Production document/resource URLs are restricted to the registered target origin and configured path prefix. Keep credentials out of task text and browser configuration.
+The backend has no runtime policy evaluation or policy environment variables. Discovery always starts at the registered app deployment's URL. All supported browser tools, subsequent destinations, resources, frames and screenshots are available; native dialogs are accepted automatically. No navigation/network guard is installed, so redirects, third-party resources and WebSockets are unrestricted. Service workers and browser downloads are enabled. Tool schemas, reference validity, operation timeouts and artifact/output contracts still validate execution. The adapter supports one page per run. Keep credentials out of task text and browser configuration.
 
 ```sh
 PYTHONPATH=backend backend/.venv/bin/uvicorn interface_api.main:app --host 127.0.0.1 --port 8000 --workers 1

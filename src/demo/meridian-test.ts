@@ -10,7 +10,6 @@ import { join, resolve } from "node:path";
 import { z } from "zod";
 import { BrowserAdapter } from "../adapters/browser/browser-adapter.js";
 import { runTask } from "../runtime/run-task.js";
-import { RuntimePolicy } from "../runtime/policy.js";
 import { createFileAudit } from "../runtime/audit.js";
 import { toolResultSchemas } from "../contracts/tools.js";
 import { OpenRouterClient } from "../llm/openrouter-client.js";
@@ -57,74 +56,10 @@ const expected = {
 const goal = `Find Casimir Whitlock's Savings account ending 4413 at Harbor Street. Using only the banking UI, review DEBIT transactions from 2026-01-01 through 2026-01-31 inclusive. Report customer ID, full account number, debit transaction count, total debits and the largest debit's amount, date, description and transaction ID. Leave account data unchanged; do not edit contact details, request limits, print or export files, or enter supervisor/developer screens. Verify the filters and extract the requested evidence with extract_data. Call finish_task with outcome goal_achieved and outputs shaped as {customer_id:string,account_number:string,debit_count:number,total_debits:string,largest_debit:{amount:string,date:string,description:string,transaction_id:string}}. Report positive debit amounts as currency strings including dollar sign and thousands separators. Never guess references or values.`;
 const controls = () =>
   latest?.controls.status === "available" ? latest.controls.items : [];
-const editable = new Set([
-  "Customer name",
-  "Customer ID",
-  "Account number",
-  "Branch",
-  "Quick account no.",
-  "From date",
-  "To date",
-  "Text",
-  "Type",
-  "Rows per page",
-]);
-class BankPolicy extends RuntimePolicy {
-  override allowUrl(raw: string, resource = false) {
-    if (!super.allowUrl(raw, resource)) return false;
-    if (resource) return true;
-    const path = new URL(raw).pathname;
-    return (
-      path === "/" ||
-      /^\/customers\/C\d+\/?$/.test(path) ||
-      /^\/accounts\/\d{3}-\d+\/transactions\/?$/.test(path)
-    );
-  }
-}
-const policy = new BankPolicy({
-  documents: [{ origin: new URL(targetUrl).origin, pathPrefix: "/" }],
-  resourceOrigins: [new URL(targetUrl).origin],
-  allowedActions: Object.keys(
-    toolResultSchemas,
-  ) as (keyof typeof toolResultSchemas)[],
-  allowScreenshots: true,
-  allowSrcdocFrames: true,
-  validateOutputs: (output) => fields.safeParse(output).success,
-  riskyAction: (action) => {
-    if (action.name === "navigate") return "allow";
-    if (
-      !("target" in action.input) ||
-      !action.input.target ||
-      action.input.target.kind !== "control"
-    )
-      return "deny";
-    const ref = action.input.target.control_ref;
-    const c = controls().find((c) => c.ref === ref);
-    if (!c) return "deny";
-    if (["type_text", "press_key", "select_option"].includes(action.name))
-      return editable.has(c.name) ? "allow" : "deny";
-    if (action.name === "click") {
-      if (editable.has(c.name)) return "allow";
-      if (c.role === "option" && /^(\d{3} — |All branches$)/.test(c.name))
-        return "allow";
-      if (
-        c.role === "link" &&
-        (/^Open .+ C\d+$/.test(c.name) ||
-          /^Transactions for \d{3}-\d+$/.test(c.name) ||
-          /^(Customer Search|C\d+)$/.test(c.name))
-      )
-        return "allow";
-      if (
-        c.role === "button" &&
-        /^(Search|Clear|Apply filter|Show branches|Transaction ID(?: [▲▼])?|Date(?: [▲▼])?|Amount(?: [▲▼])?|« First|‹ Previous|Next ›|Last »)$/.test(
-          c.name,
-        )
-      )
-        return "allow";
-    }
-    return "deny";
-  },
-});
+const contract = {
+  validateOutputs: (output: Record<string, unknown>) =>
+    fields.safeParse(output).success,
+};
 writeFileSync(
   join(directory, "manifest.json"),
   JSON.stringify(
@@ -138,8 +73,8 @@ writeFileSync(
       maxToolCalls: 40,
       providerRequestTimeoutMs: preflight ? null : 120000,
       browser: "fresh Chromium context",
-      sandbox:
-        "localhost document/resource allowlist; read-only banking controls",
+      execution:
+        "Unrestricted browser; task requests read-only banking actions",
       outputs: fields.toJSONSchema?.(),
     },
     null,
@@ -351,10 +286,10 @@ async function main() {
     { goal, targetUrl },
     {
       model: client,
-      policy,
+      contract,
       adapterFactory: {
         async createForTask() {
-          const adapter = await BrowserAdapter.create(policy, {
+          const adapter = await BrowserAdapter.create({
             headless: preflight,
             captureMs: 15000,
             viewport: { width: 1440, height: 900 },

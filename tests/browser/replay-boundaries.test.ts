@@ -2,7 +2,6 @@ import { evaluateCheck } from "../../src/replay/checks.js";
 import { it, expect } from "vitest";
 import { readFile } from "node:fs/promises";
 import { createBrowserFactory } from "../../src/adapters/factory.js";
-import { syntheticPolicy } from "../../src/runtime/policy.js";
 import { startFixture } from "../helpers/fixture-server.js";
 import { resolveTarget } from "../../src/replay/targets.js";
 import { runReplay } from "../../src/replay/run-replay.js";
@@ -11,10 +10,10 @@ it("resolves only the named scoped duplicate from fresh captured ancestry", asyn
     undefined,
     '<section aria-label="Primary"><button>Search</button></section><section aria-label="Secondary"><button>Search</button></section><span aria-label="Status">Active</span>',
   );
-  const adapter = await createBrowserFactory({ headless: true }).createForTask(
-    { goal: "test", targetUrl: fixture.url },
-    syntheticPolicy(fixture.url),
-  );
+  const adapter = await createBrowserFactory({ headless: true }).createForTask({
+    goal: "test",
+    targetUrl: fixture.url,
+  });
   try {
     await adapter.execute({ name: "navigate", input: { url: fixture.url } });
     const capture = await adapter.capture("both");
@@ -127,7 +126,6 @@ it("bounds wait recovery and never retries a mutation", async () => {
       },
       {
         adapterFactory: createBrowserFactory({ headless: true }),
-        policy: syntheticPolicy(fixture.url),
       },
       {
         onAudit: async (type, payload, image, step) => {

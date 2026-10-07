@@ -4,5 +4,5 @@ import type { BrowserOptions } from "../runtime/config.js";
 export const createBrowserFactory = (
   options: Partial<BrowserOptions> = {},
 ): BrowserAdapterFactory => ({
-  createForTask: (_input, policy) => BrowserAdapter.create(policy, options),
+  createForTask: (_input) => BrowserAdapter.create(options),
 });

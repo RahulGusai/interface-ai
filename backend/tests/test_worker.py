@@ -13,6 +13,26 @@ class NeverRunner:
 
 
 @pytest.mark.asyncio
+async def test_worker_command_has_no_policy_configuration(repo, tmp_path):
+    commands = []
+
+    class CaptureRunner:
+        async def run(self, command, *args):
+            commands.append(command)
+            raise RuntimeError("RUNNER_EXITED")
+
+    settings = Settings(repo_root=tmp_path, _env_file=None)
+    worker = Worker(repo, settings, None, CaptureRunner())
+    pending = run(repo)
+    await worker.execute_raw(pending["run_id"])
+    assert commands[0]["runtime"] == {"headless": False, "max_tool_calls": 40}
+    assert (
+        commands[0]["deployment"]["base_url"]
+        == pending["deployment_snapshot"]["base_url"]
+    )
+
+
+@pytest.mark.asyncio
 async def test_restart_and_crash_are_terminal(repo, tmp_path):
     worker = Worker(
         repo, Settings(repo_root=tmp_path, _env_file=None), None, NeverRunner()

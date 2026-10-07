@@ -32,9 +32,6 @@ export const startSchema = z.strictObject({
   runtime: z.strictObject({
     headless: z.boolean(),
     max_tool_calls: z.number().int().positive(),
-    allow_writes: z.boolean(),
-    allow_screenshots: z.boolean(),
-    path_prefix: z.string().startsWith("/"),
   }),
 });
 export type StartCommand = z.infer<typeof startSchema>;

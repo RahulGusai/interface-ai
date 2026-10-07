@@ -1,6 +1,5 @@
 import { it, expect } from "vitest";
 import { BrowserAdapter } from "../../src/adapters/browser/browser-adapter.js";
-import { syntheticPolicy } from "../../src/runtime/policy.js";
 import { startFixture } from "../helpers/fixture-server.js";
 import type { Observation } from "../../src/contracts/observation.js";
 import type { ToolResponse } from "../../src/contracts/tools.js";
@@ -19,13 +18,12 @@ const target = (o: Extract<Observation, { status: "ok" }>, name: string) => {
 };
 it("isolates task references, validates iframe fields, checks once and waits without model calls", async () => {
   const fixture = await startFixture();
-  const policy = syntheticPolicy(fixture.url);
-  const a = await BrowserAdapter.create(policy, {
+  const a = await BrowserAdapter.create({
     headless: true,
     waitMs: 600,
     pollMs: 20,
   });
-  const b = await BrowserAdapter.create(policy, { headless: true });
+  const b = await BrowserAdapter.create({ headless: true });
   try {
     let o = obs(
       await a.execute({ name: "navigate", input: { url: fixture.url } }),
@@ -96,37 +94,47 @@ it("isolates task references, validates iframe fields, checks once and waits wit
     await fixture.close();
   }
 });
-it("blocks redirect and link destinations before contacting forbidden server", async () => {
-  const fixture = await startFixture();
-  for (const name of ["Redirect link", "Forbidden link"]) {
-    const a = await BrowserAdapter.create(syntheticPolicy(fixture.url), {
-      headless: true,
-    });
-    try {
-      const o = obs(
-        await a.execute({ name: "navigate", input: { url: fixture.url } }),
-      );
-      const r = await a.execute({
-        name: "click",
-        input: { observation_id: o.observation_id, target: target(o, name) },
-      });
-      expect(r.result).toMatchObject({
-        status: "blocked",
-        blocker: { kind: "policy" },
-      });
-      expect(
-        (await a.execute({ name: "observe_ui", input: { mode: "both" } }))
-          .result.status,
-      ).toBe("needs_intervention");
-    } finally {
-      await a.close();
+it("allows redirects and cross-origin links", async () => {
+  const remote = await startFixture(
+    undefined,
+    "<button>External destination</button>",
+  );
+  const fixture = await startFixture(
+    undefined,
+    `<a href='/redirect'>Redirect link</a><a href='${remote.url}/destination'>External link</a>`,
+    remote.url + "/destination",
+  );
+  try {
+    for (const name of ["Redirect link", "External link"]) {
+      const adapter = await BrowserAdapter.create({ headless: true });
+      try {
+        const observation = obs(
+          await adapter.execute({
+            name: "navigate",
+            input: { url: fixture.url },
+          }),
+        );
+        const result = await adapter.execute({
+          name: "click",
+          input: {
+            observation_id: observation.observation_id,
+            target: target(observation, name),
+          },
+        });
+        expect(result.result.status).toBe("completed");
+        expect(obs(result).surface.url).toBe(remote.url + "/destination");
+      } finally {
+        await adapter.close();
+      }
     }
+  } finally {
+    await fixture.close();
+    await remote.close();
   }
-  await fixture.close();
 });
 it("rejects disabled text and options without blind input, scroll boundary preserves parent and focus", async () => {
   const fixture = await startFixture();
-  const a = await BrowserAdapter.create(syntheticPolicy(fixture.url), {
+  const a = await BrowserAdapter.create({
     headless: true,
   });
   try {

@@ -1,6 +1,6 @@
 import { it, expect } from "vitest";
 import { runTask } from "../../src/runtime/run-task.js";
-import { syntheticPolicy } from "../../src/runtime/policy.js";
+import { syntheticContract } from "../../src/demo/synthetic-contract.js";
 import { makeFakeAdapter } from "../helpers/fake-adapter.js";
 import type { AgentTurn } from "../../src/contracts/run.js";
 import { createFileAudit } from "../../src/runtime/audit.js";
@@ -30,7 +30,7 @@ it("audits exact input strings, bootstrap, rejected calls and unexecuted batch t
     { goal: "Inspect", targetUrl: "https://example.org/app" },
     {
       adapterFactory: { createForTask: async () => adapter },
-      policy: syntheticPolicy("https://example.org/app"),
+      contract: syntheticContract(),
       model: { model: "fake", complete: async () => turn },
     },
     { onAudit: (record: any) => records.push(record) },
@@ -60,7 +60,7 @@ it("stops before dispatch when durable audit writing fails", async () => {
     { goal: "Inspect", targetUrl: "https://example.org/app" },
     {
       adapterFactory: { createForTask: async () => adapter },
-      policy: syntheticPolicy("https://example.org/app"),
+      contract: syntheticContract(),
       model: {
         model: "fake",
         complete: async () => {

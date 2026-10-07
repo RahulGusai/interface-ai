@@ -1,6 +1,7 @@
+import { validateToolResponse } from "../../src/runtime/tool-response.js";
 import { it, expect } from "vitest";
 import { ConversationHistory } from "../../src/runtime/history.js";
-import { RuntimePolicy, syntheticPolicy } from "../../src/runtime/policy.js";
+import { syntheticContract } from "../../src/demo/synthetic-contract.js";
 import { finalize } from "../../src/runtime/finalization.js";
 import { convertNumber } from "../../src/adapters/browser/extraction.js";
 it("keeps tool-result batches contiguous while pairing each image with its call ID", () => {
@@ -42,7 +43,7 @@ it("keeps tool-result batches contiguous while pairing each image with its call 
   ).toThrow();
 });
 it("does not fabricate artifact acceptance or accept unknown outputs/business codes", () => {
-  const p = syntheticPolicy("https://example.org");
+  const p = syntheticContract();
   expect(
     finalize(
       { observation_id: "o", outcome: "goal_achieved", summary: "done" },
@@ -107,11 +108,7 @@ it("only accepts finite plain decimal numbers", () => {
   ] as const)
     expect(convertNumber(s)).toBe(n);
 });
-it("drops images when policy suppresses them and rejects private output members", () => {
-  const p = new RuntimePolicy({
-    ...syntheticPolicy("https://example.org").config,
-    allowScreenshots: false,
-  });
+it("preserves screenshots and rejects missing image bytes or private protocol members", () => {
   const result = {
     status: "ok" as const,
     observation_id: "o",
@@ -125,13 +122,27 @@ it("drops images when policy suppresses them and rejects private output members"
       height: 1,
     },
   };
-  expect(p.project("observe_ui", { result }).image).toBeUndefined();
-  expect(p.project("observe_ui", { result }).result).toMatchObject({
-    screenshot: { status: "unavailable" },
-  });
+  const image = {
+    ref: "i",
+    mimeType: "image/png" as const,
+    bytes: Buffer.from("png"),
+  };
+  expect(validateToolResponse("observe_ui", { result, image }).image).toEqual(
+    image,
+  );
+  expect(() => validateToolResponse("observe_ui", { result })).toThrow(
+    "Missing image bytes",
+  );
   expect(() =>
-    p.project("observe_ui", {
+    validateToolResponse("observe_ui", {
+      result,
+      image: { ...image, ref: "wrong" },
+    }),
+  ).toThrow("Missing image bytes");
+  expect(() =>
+    validateToolResponse("observe_ui", {
       result: { ...result, bindings: new Map() } as never,
+      image,
     }),
   ).toThrow();
 });

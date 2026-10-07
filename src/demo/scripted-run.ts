@@ -2,7 +2,7 @@ import { startFixture } from "../../tests/helpers/fixture-server.js";
 import { scriptedModel } from "./scripted-model.js";
 import { runTask } from "../runtime/run-task.js";
 import { createBrowserFactory } from "../adapters/factory.js";
-import { syntheticPolicy } from "../runtime/policy.js";
+import { syntheticContract } from "../demo/synthetic-contract.js";
 const fixture = await startFixture();
 try {
   console.log("SCRIPTED mechanics demo — fake model, real headed Chromium.");
@@ -10,7 +10,7 @@ try {
     { goal: "Find synthetic member 42", targetUrl: fixture.url },
     {
       model: scriptedModel(),
-      policy: syntheticPolicy(fixture.url),
+      contract: syntheticContract(),
       adapterFactory: createBrowserFactory({ headless: false, slowMo: 150 }),
     },
     {

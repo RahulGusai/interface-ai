@@ -19,7 +19,7 @@ node --import tsx src/demo/meridian-test.ts
 
 Use the bundled Node 24 or supported Node 22 runtime; the default shell's Node 23 does not match the package engine range. The live runner uses the explicitly selected `z-ai/glm-5.3-flash` slug and the existing default budget of 40 model tool calls. Preflight uses a scripted model without any provider request; its directory is labelled separately and is not agent evidence.
 
-The live run opens a fresh visible Chromium context. Documents are limited to customer search, customer overview and transaction history at the local banking origin. Customer contact, limit, supervisor and developer pages are denied. Input/click targets are limited to the read-only search/filter/sort/navigation controls; point actions are denied. Browser resources are same-origin only. This is browser policy isolation, not an OS/container sandbox; the model client contacts OpenRouter. Inline `about:srcdoc` frames are explicitly allowed only beneath a recursively permitted parent. Other non-HTTP destinations stay denied.
+The live run opens a fresh visible Chromium context. Runtime policy evaluation was removed on 2026-10-07: all supported input/click actions, destinations, resources, frames and screenshots are available. The scenario's prompt asks for read-only account review; there is no runtime policy enforcing that instruction. The original test evidence below was collected before this policy removal.
 
 Each OpenRouter request has a 120-second client deadline. Each run creates a timestamped directory in `artifacts/meridian/` with:
 
@@ -30,7 +30,7 @@ Each OpenRouter request has a 120-second client deadline. Each run creates a tim
 - `provider-metrics.jsonl`: provider HTTP status, response time, generation ID and token/cost usage; no raw response bodies or authorization headers.
 - `result.json`, `report.json`, `final-ui.json`, `final-ui.png`: runtime outcome, independent fixture/UI comparison and final review evidence.
 
-Audit writes happen before dispatch and after the result; a write failure halts execution instead of silently dropping calls. The audit includes automatic post-action observations inside each tool result; internal browser polling is not represented as a new model tool call. Inputs remain exact for this synthetic task; generic runtime redaction still applies when a caller configures it.
+Audit writes happen before dispatch and after the result; a write failure halts execution instead of silently dropping calls. The audit includes automatic post-action observations inside each tool result; internal browser polling is not represented as a new model tool call. Inputs remain exact for this synthetic task; the runtime has no configurable redaction policy.
 
 During the live run, `http://127.0.0.1:4180/` shows the audit as it grows. The supervised runner keeps Chromium and that viewer open after evaluation, for review only. Ctrl+C in the runner closes both; it does not support model continuation or takeover. The banking server is a separate process.
 

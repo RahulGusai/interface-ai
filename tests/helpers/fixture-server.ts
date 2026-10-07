@@ -1,6 +1,10 @@
 import { createServer } from "node:http";
 import { readFile } from "node:fs/promises";
-export async function startFixture(visualCode?: string, htmlOverride?: string) {
+export async function startFixture(
+  visualCode?: string,
+  htmlOverride?: string,
+  redirectTarget = "http://127.0.0.1:1/forbidden",
+) {
   let html = await readFile(
     new URL("../fixtures/legacy-app/index.html", import.meta.url),
     "utf8",
@@ -13,7 +17,7 @@ export async function startFixture(visualCode?: string, htmlOverride?: string) {
     );
   const server = createServer((req, res) => {
     if (req.url === "/redirect") {
-      res.writeHead(302, { Location: "http://127.0.0.1:1/forbidden" });
+      res.writeHead(302, { Location: redirectTarget });
       res.end();
       return;
     }

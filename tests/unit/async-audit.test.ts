@@ -1,12 +1,12 @@
 import { it, expect } from "vitest";
 import { runTask } from "../../src/runtime/run-task.js";
-import { syntheticPolicy } from "../../src/runtime/policy.js";
+import { syntheticContract } from "../../src/demo/synthetic-contract.js";
 it("awaits durable audit and stops before navigation when the sink fails", async () => {
   let dispatched = 0;
   const result = await runTask(
     { goal: "test", targetUrl: "http://localhost:3000" },
     {
-      policy: syntheticPolicy("http://localhost:3000"),
+      contract: syntheticContract(),
       model: {
         model: "test",
         complete: async () => {
@@ -37,7 +37,7 @@ it("cancellation before start dispatches nothing", async () => {
   await runTask(
     { goal: "test", targetUrl: "http://localhost:3000" },
     {
-      policy: syntheticPolicy("http://localhost:3000"),
+      contract: syntheticContract(),
       model: {
         model: "test",
         complete: async () => {
@@ -65,7 +65,7 @@ it("discards a provider tool batch that arrives after cancellation", async () =>
   const running = runTask(
     { goal: "test", targetUrl: "http://localhost:3000" },
     {
-      policy: syntheticPolicy("http://localhost:3000"),
+      contract: syntheticContract(),
       adapterFactory: { createForTask: async () => adapter },
       model: {
         model: "fake",

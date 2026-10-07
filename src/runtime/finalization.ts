@@ -1,7 +1,10 @@
 import type { FinishTaskInput } from "../contracts/finish-task.draft.js";
-import type { RuntimePolicy } from "./policy.js";
-export function finalize(input: FinishTaskInput, policy: RuntimePolicy) {
-  if (input.outputs && !policy.config.validateOutputs?.(input.outputs))
+export type TaskContract = {
+  validateOutputs?: (outputs: Record<string, unknown>) => boolean;
+  businessCodes?: string[];
+};
+export function finalize(input: FinishTaskInput, contract: TaskContract) {
+  if (input.outputs && !contract.validateOutputs?.(input.outputs))
     return {
       status: "rejected" as const,
       code: "OUTPUT_CONTRACT_MISMATCH",
@@ -10,7 +13,7 @@ export function finalize(input: FinishTaskInput, policy: RuntimePolicy) {
   if (
     input.outcome === "business_outcome" &&
     (!input.outcome_code ||
-      !policy.config.businessCodes?.includes(input.outcome_code))
+      !contract.businessCodes?.includes(input.outcome_code))
   )
     return {
       status: "rejected" as const,

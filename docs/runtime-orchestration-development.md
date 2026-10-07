@@ -1,6 +1,6 @@
 # Runtime orchestration development
 
-This workspace implements the first browser runtime slice. It remains a non-Git workspace. No application server or port 3000 is assumed.
+This document covers the standalone browser runtime and its original verification record. The current FastAPI/backend setup is documented in the repository README. Runtime policy evaluation was removed on 2026-10-07; output contracts and tool execution validation remain.
 
 ## Setup and verification
 
@@ -35,12 +35,12 @@ Set `OPENROUTER_API_KEY` and `OPENROUTER_MODEL` in your shell. `.env.example` co
 
 ```sh
 npm run demo:runtime -- --goal 'Find synthetic member 42' --synthetic
-npm run demo:runtime -- --goal 'Inspect this allowed page' --url 'https://example.org/app' --path-prefix /app
+npm run demo:runtime -- --goal 'Inspect this page' --url 'https://example.org/app'
 ```
 
-The first command explicitly selects the synthetic fixture policy: writes and screenshots permitted, known synthetic alert accepted, unknown dialogs stop for intervention. The second command defaults to read tools and same-origin document/resource access; screenshots and UI mutations require trusted command-line options `--allow-screenshots` and `--allow-writes`. UI text and field values can still be sent to the model under that policy. Use a custom `RuntimePolicy` with redaction/field exposure rules before connecting sensitive applications. Screenshots are suppressed whenever text-redaction patterns are configured; partial image redaction is not claimed.
+Both commands make all supported browser tools and screenshots available. There are no action, destination, resource, dialog or exposure policy callbacks or command-line switches. Redirects, cross-origin frames and resources, WebSockets, service workers and browser downloads are available; native dialogs are accepted automatically. The backend always supplies the registered app deployment's URL as the discovery starting URL.
 
-The CLI is headed by default. `--headless` is for automation. `--max-tool-calls 12` changes the trusted positive integer budget (default 40). `--synthetic` is the recommended demo path. Arbitrary custom sites may need explicit resource origins, dialog rules and task output contracts through the library API; the CLI does not silently widen policy to accommodate them.
+The CLI is headed by default. `--headless` is for automation. `--max-tool-calls 12` changes the positive integer budget (default 40). `--synthetic` starts the member-search fixture and supplies its output contract. Other task output contracts are supplied through the library API.
 
 ```sh
 RUN_LIVE_OPENROUTER=1 npm run test:integration
@@ -52,9 +52,9 @@ The paid smoke test runs only when that flag and both environment variables are 
 
 ## Public runtime boundary
 
-`runTask(input, { model, adapterFactory, policy }, options)` validates input and creates one browser adapter for that invocation. Every tool, including initial navigation, uses the same bound adapter and policy. The runtime owns history, dispatch and counting. The adapter owns references and browser operations. There is no session ID, persistent registry, resume, cross-run browser reuse, or LLM-selected adapter.
+`runTask(input, { model, adapterFactory, contract }, options)` validates input and creates one browser adapter for that invocation. Every tool, including initial navigation, uses the same bound adapter. The runtime owns history, dispatch and counting. The adapter owns references and browser operations. There is no session ID, persistent registry, resume, cross-run browser reuse, or LLM-selected adapter.
 
-The trusted caller supplies exact allowed origins and path prefixes, independent resource origins, action allowlists, a risky-action decision callback, dialog rules and data-exposure rules. Path matching uses origin equality and directory boundaries. Embedded credentials, non-HTTP(S) destinations and encoded path separators are rejected. A caller can explicitly permit inline `about:srcdoc` child frames beneath a recursively allowed parent with `allowSrcdocFrames`; this does not allow non-HTTP navigation targets or external resources. Browser document requests and redirect destinations are checked before forwarding; action navigation is guarded too. Service workers and WebSockets are disabled for this slice. This is browser policy enforcement, not a network/OS sandbox against a hostile browser exploit or DNS rebinding.
+The optional task contract validates declared outputs and business outcome codes. It does not evaluate whether browser actions or destinations are permitted. Tool argument/result schemas, screenshot correlation, current observations and reference validity still validate execution.
 
 The provider always receives all twelve generated tool schemas, ordered assistant calls and matching tool results. Tool-call IDs are preserved. Tool images are carried as actual in-memory PNG data URLs, paired with observation and call IDs. Image messages are emitted after an entire tool-result batch, preserving the provider's tool protocol. Missing bytes fail before a provider request. UI content is marked as untrusted data in the fixed versioned prompt and observation messages.
 
@@ -69,7 +69,7 @@ The only agent stopping budget is `maxToolCalls`. Individual HTTP, navigation, i
 | Tool | Inputs and restrictions | Result meaning |
 | --- | --- | --- |
 | `observe_ui` | Required `mode`: screenshot, controls, both | Current metadata plus actual permitted PNG bytes; unavailable differs from empty |
-| `navigate` | HTTP(S) task or observed URL | Navigation/observation completed, blocked, failed or uncertain; not business success |
+| `navigate` | URL; bootstrap comes from the registered deployment in the backend | Navigation/observation completed, blocked, failed or uncertain; not business success |
 | `click` | Observation + control or screenshot point | One primary click; no forced click or automatic retry |
 | `type_text` | Observation + control/point, text, replace/append | Completed only with matched text; append is at field end |
 | `press_key` | Observation, optional control, single key/chord | Focus without click; point target prohibited; modifiers released |
@@ -85,11 +85,11 @@ Conditions are visible, hidden, enabled, text_equals and value_equals. Text comp
 
 New observations supersede all prior references. Navigation/frame replacement invalidates bindings; action targets are revalidated. Points refer to the exact viewport screenshot in CSS pixels, including at device scale 2. Detectable layout drift in the main document or child frames rejects point actions. Point typing must match the hit-tested editable focus and cannot reuse an unrelated previously focused field. The complete capture (including semantic reads) has a finite deadline and halts pending work on timeout. Capture retries once if the document/layout changes; it does not claim atomicity on a continuously changing UI. Unsupported cross-origin editable focus or custom widgets fail honestly. There is no unrestricted JavaScript or selector tool.
 
-Unknown native dialogs signal intervention while the pending action retains ownership. The adapter is halted and cannot accept another operation. Task cleanup closes the context to terminate unresolved operations. This intentionally follows the newer plan's cleanup rule rather than preserving a browser for an unimplemented takeover flow.
+Native dialogs are accepted automatically. Failed dialog handling and unsupported additional pages still report execution limitations. Task cleanup closes the context to terminate unresolved operations; takeover is not implemented.
 
 ## Outcomes and remaining scope
 
-Public statuses: `max_tool_calls_reached`, `needs_intervention`, `awaiting_artifact_design`, `business_outcome`, `unable_to_complete`, `agent_stopped_unverified`, `provider_error`, `tool_error`, `policy_blocked`. Model text saying “done” is only an unverified report.
+Public statuses: `max_tool_calls_reached`, `needs_intervention`, `awaiting_artifact_design`, `business_outcome`, `unable_to_complete`, `agent_stopped_unverified`, `provider_error`, `tool_error`. Historical persisted records may still contain `policy_blocked`; the runtime no longer evaluates policies or emits that outcome. Model text saying “done” is only an unverified report.
 
 Still deferred: validated capability artifacts and storage/versioning, deterministic replay, full human takeover/resume/action capture, product UI and artifact manager, desktop adapters, additional providers/fallbacks, distributed/concurrent execution, persistent evidence/checkpoints, history compression, additional task budgets, risky-action approval continuation, and final `finish_task` schema. Source organization is not proof of desktop support or production scale. No deployment, publication, push or complete-assignment claim is made.
 

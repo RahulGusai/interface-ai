@@ -4,7 +4,7 @@ import { runTask } from "../../src/runtime/run-task.js";
 import { OpenRouterClient } from "../../src/llm/openrouter-client.js";
 import { loadOpenRouterConfig } from "../../src/runtime/config.js";
 import { createBrowserFactory } from "../../src/adapters/factory.js";
-import { syntheticPolicy } from "../../src/runtime/policy.js";
+import { syntheticContract } from "../../src/demo/synthetic-contract.js";
 import { startFixture } from "../helpers/fixture-server.js";
 const live =
   process.env.RUN_LIVE_OPENROUTER === "1" &&
@@ -27,7 +27,7 @@ it.skipIf(!live)(
           targetUrl: fixture.url,
         },
         {
-          policy: syntheticPolicy(fixture.url),
+          contract: syntheticContract(),
           adapterFactory: createBrowserFactory({ headless: true }),
           model: {
             model: client.model,

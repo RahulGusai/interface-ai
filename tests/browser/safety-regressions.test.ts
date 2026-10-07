@@ -1,6 +1,5 @@
 import { it, expect } from "vitest";
 import { BrowserAdapter } from "../../src/adapters/browser/browser-adapter.js";
-import { syntheticPolicy, RuntimePolicy } from "../../src/runtime/policy.js";
 import { startFixture } from "../helpers/fixture-server.js";
 import type { ToolResponse } from "../../src/contracts/tools.js";
 const obs = (r: ToolResponse) => {
@@ -8,16 +7,12 @@ const obs = (r: ToolResponse) => {
   if (o.status !== "ok") throw new Error(JSON.stringify(o));
   return o;
 };
-it("blocks same-document navigation beyond allowed path", async () => {
+it("allows same-document navigation without a path policy", async () => {
   const f = await startFixture(
     undefined,
     `<button onclick="history.pushState({},'', '/forbidden')">Leave path</button>`,
   );
-  const p = new RuntimePolicy({
-    ...syntheticPolicy(f.url).config,
-    documents: [{ origin: f.url, pathPrefix: "/allowed" }],
-  });
-  const a = await BrowserAdapter.create(p, { headless: true });
+  const a = await BrowserAdapter.create({ headless: true });
   try {
     const o = obs(
       await a.execute({ name: "navigate", input: { url: f.url + "/allowed" } }),
@@ -34,7 +29,10 @@ it("blocks same-document navigation beyond allowed path", async () => {
           },
         })
       ).result,
-    ).toMatchObject({ status: "blocked", blocker: { kind: "policy" } });
+    ).toMatchObject({
+      status: "completed",
+      observation: { surface: { url: f.url + "/forbidden" } },
+    });
   } finally {
     await a.close();
     await f.close();
@@ -45,7 +43,7 @@ it("point input rejects layout drift inside an unchanged iframe", async () => {
     undefined,
     `<button onclick="setTimeout(()=>document.querySelector('iframe').contentDocument.body.style.marginTop='80px',300)">Shift frame content</button><iframe src='/frame'></iframe>`,
   );
-  const a = await BrowserAdapter.create(syntheticPolicy(f.url), {
+  const a = await BrowserAdapter.create({
     headless: true,
   });
   try {
@@ -85,7 +83,7 @@ it("point typing cannot reuse previously focused input when clicked surface prev
     undefined,
     `<label>Entry<input></label><div style="position:absolute;left:500px;top:30px;width:150px;height:100px" onmousedown="event.preventDefault()">Uneditable surface</div>`,
   );
-  const a = await BrowserAdapter.create(syntheticPolicy(f.url), {
+  const a = await BrowserAdapter.create({
     headless: true,
   });
   try {
@@ -130,7 +128,7 @@ it("pending input timeout prevents a later write or retry", async () => {
     undefined,
     `<label>Entry<input oninput="const end=Date.now()+350;while(Date.now()<end){}"></label>`,
   );
-  const a = await BrowserAdapter.create(syntheticPolicy(f.url), {
+  const a = await BrowserAdapter.create({
     headless: true,
     actionMs: 75,
   });
@@ -163,7 +161,7 @@ it("password conditions never expose values in evidence", async () => {
     undefined,
     '<label>Password<input type="password" value="SAMPLE_SECRET"></label>',
   );
-  const a = await BrowserAdapter.create(syntheticPolicy(f.url), {
+  const a = await BrowserAdapter.create({
     headless: true,
   });
   try {
@@ -194,7 +192,7 @@ it("all capture phases obey the trusted operation timeout", async () => {
     undefined,
     '<button onclick="setTimeout(()=>{const end=Date.now()+1800;while(Date.now()<end){}},300)">Freeze briefly</button>',
   );
-  const a = await BrowserAdapter.create(syntheticPolicy(f.url), {
+  const a = await BrowserAdapter.create({
     headless: true,
     captureMs: 100,
   });
@@ -227,7 +225,7 @@ it("all capture phases obey the trusted operation timeout", async () => {
 });
 it("publishes native option labels under their observed select control", async () => {
   const f = await startFixture();
-  const a = await BrowserAdapter.create(syntheticPolicy(f.url), {
+  const a = await BrowserAdapter.create({
     headless: true,
   });
   try {

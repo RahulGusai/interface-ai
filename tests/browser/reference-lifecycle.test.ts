@@ -1,7 +1,6 @@
 import { it, expect } from "vitest";
 import { startFixture } from "../helpers/fixture-server.js";
 import { BrowserAdapter } from "../../src/adapters/browser/browser-adapter.js";
-import { syntheticPolicy } from "../../src/runtime/policy.js";
 import type { ToolResponse } from "../../src/contracts/tools.js";
 import type { Observation } from "../../src/contracts/observation.js";
 const obs = (r: ToolResponse) => {
@@ -21,7 +20,7 @@ const target = (o: Extract<Observation, { status: "ok" }>, name: string) => {
 const html = `<html><body><label>Entry<input id=input></label><button id=search onclick="count.textContent=String(Number(count.textContent)+1)">Search</button><p id=count>0</p><button onclick="setTimeout(()=>search.textContent='Delete',400)">Repurpose</button><button onclick="setTimeout(()=>search.remove(),400)">Remove</button><button onclick="setTimeout(()=>location.reload(),400)">Reload</button><button onclick="setTimeout(()=>document.body.style.marginLeft='100px',400)">Move</button><button onclick="document.querySelector('input').setSelectionRange(1,1)">Middle caret</button><button onclick="setTimeout(()=>document.querySelector('iframe').src='/frame?replaced',400)">Replace frame</button><iframe src='/frame'></iframe></body></html>`;
 it("exact bindings reject same-node action identity changes; missing targets satisfy hidden but not value checks", async () => {
   const f = await startFixture(undefined, html);
-  const a = await BrowserAdapter.create(syntheticPolicy(f.url), {
+  const a = await BrowserAdapter.create({
     headless: true,
   });
   try {
@@ -77,7 +76,7 @@ it("exact bindings reject same-node action identity changes; missing targets sat
 it("document and iframe replacement invalidate waits; coordinate layout drift is rejected", async () => {
   const f = await startFixture(undefined, html);
   for (const name of ["Reload", "Replace frame", "Move"]) {
-    const a = await BrowserAdapter.create(syntheticPolicy(f.url), {
+    const a = await BrowserAdapter.create({
       headless: true,
       waitMs: 1200,
       pollMs: 20,
@@ -124,7 +123,7 @@ it("document and iframe replacement invalidate waits; coordinate layout drift is
 });
 it("append uses field end, targeted Enter activates only once, and extraction keys are safe", async () => {
   const f = await startFixture(undefined, html);
-  const a = await BrowserAdapter.create(syntheticPolicy(f.url), {
+  const a = await BrowserAdapter.create({
     headless: true,
   });
   try {

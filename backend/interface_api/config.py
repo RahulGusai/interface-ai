@@ -33,11 +33,6 @@ class Settings(BaseSettings):
     )
     headless: bool = Field(False, validation_alias="INTERFACE_BROWSER_HEADLESS")
     max_tool_calls: int = Field(40, gt=0, validation_alias="INTERFACE_MAX_TOOL_CALLS")
-    allow_writes: bool = Field(False, validation_alias="INTERFACE_ALLOW_WRITES")
-    allow_screenshots: bool = Field(
-        False, validation_alias="INTERFACE_ALLOW_SCREENSHOTS"
-    )
-    path_prefix: str = Field("/", validation_alias="INTERFACE_PATH_PREFIX")
     minio_endpoint: str | None = None
     minio_public_endpoint: str | None = None
     minio_secure: bool = True

@@ -11,7 +11,7 @@ import {
 import { finishTaskInput } from "../contracts/finish-task.draft.js";
 import type { BrowserAdapterFactory } from "../adapters/surface.js";
 import type { ModelClient } from "../llm/model-client.js";
-import type { RuntimePolicy } from "./policy.js";
+import type { TaskContract } from "./finalization.js";
 import { parseTaskInput, maxToolCalls } from "./config.js";
 import { ConversationHistory } from "./history.js";
 import { buildInitialMessages } from "./prompts.js";
@@ -30,7 +30,7 @@ export type TaskRunContext = DispatchContext & {
 export type RunDependencies = {
   model: ModelClient;
   adapterFactory: BrowserAdapterFactory;
-  policy: RuntimePolicy;
+  contract?: TaskContract;
 };
 export async function runTask(
   raw: unknown,
@@ -44,6 +44,7 @@ export async function runTask(
   } = {},
 ): Promise<RunResult> {
   const input: TaskInput = parseTaskInput(raw);
+  const contract = deps.contract ?? {};
   const budget = maxToolCalls(options.maxToolCalls);
   let used = 0;
   let context: TaskRunContext | undefined;
@@ -73,7 +74,7 @@ export async function runTask(
   const audit: AuditSink = async (record, image) => {
     if (auditFailed) throw new Error("Audit unavailable");
     try {
-      await options.onAudit?.(deps.policy.sanitize(record), image);
+      await options.onAudit?.(record, image);
     } catch (error) {
       auditFailed = true;
       throw error;
@@ -103,7 +104,7 @@ export async function runTask(
             options.discovery,
             fresh,
           );
-          context!.policy.config.validateOutputs = (outputs) => {
+          contract.validateOutputs = (outputs) => {
             try {
               return (
                 JSON.stringify(outputs) ===
@@ -215,18 +216,16 @@ export async function runTask(
     summary: string,
     extra: Partial<RunResult> = {},
   ): RunResult =>
-    runResultSchema.parse(
-      deps.policy.sanitize({
-        status,
-        summary,
-        model: "configured-model",
-        toolCallsUsed: used,
-        ...extra,
-      }),
-    );
+    runResultSchema.parse({
+      status,
+      summary,
+      model: "configured-model",
+      toolCallsUsed: used,
+      ...extra,
+    });
   const emit = (event: RunEvent) => {
     try {
-      options.onEvent?.(deps.policy.sanitize(event));
+      options.onEvent?.(event);
     } catch {
       /* Diagnostic observers cannot control execution. */
     }
@@ -261,15 +260,6 @@ export async function runTask(
       );
     }
   };
-  if (
-    deps.policy.decide({
-      name: "navigate",
-      input: { url: input.targetUrl },
-    }) !== "allow"
-  )
-    return await stop(
-      result("policy_blocked", "Initial destination denied by trusted policy"),
-    );
   emit({ type: "started", targetUrl: input.targetUrl });
   try {
     await audit({
@@ -279,10 +269,10 @@ export async function runTask(
       maxToolCalls: budget,
     });
     options.signal?.throwIfAborted();
-    const adapter = await deps.adapterFactory.createForTask(input, deps.policy);
+    const adapter = await deps.adapterFactory.createForTask(input);
     context = {
       adapter,
-      policy: deps.policy,
+      contract,
       busy: false,
       halted: false,
       history: new ConversationHistory(buildInitialMessages(input)),
@@ -311,11 +301,7 @@ export async function runTask(
     if (bootstrap.result.status !== "completed")
       return await stop(
         result(
-          context.halted
-            ? "needs_intervention"
-            : bootstrap.result.status === "policy_blocked"
-              ? "policy_blocked"
-              : "tool_error",
+          context.halted ? "needs_intervention" : "tool_error",
           "Initial navigation did not complete",
         ),
       );
@@ -344,9 +330,7 @@ export async function runTask(
       try {
         turn = agentTurnSchema.parse(
           await deps.model.complete(
-            context.history.messages.map((m) =>
-              m.role === "observation" ? m : deps.policy.sanitize(m),
-            ),
+            context.history.messages.map((m) => m),
             definitions,
             { signal: options.signal },
           ),
@@ -405,14 +389,6 @@ export async function runTask(
           callId: call.id,
           status: response.result.status,
         });
-        if (
-          response.result.status === "policy_blocked" ||
-          ("blocker" in response.result &&
-            response.result.blocker?.kind === "policy")
-        )
-          return await stop(
-            result("policy_blocked", "Action denied by trusted policy"),
-          );
         if (context.halted || response.result.status === "needs_intervention")
           return await stop(
             result(

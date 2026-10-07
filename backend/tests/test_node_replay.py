@@ -80,9 +80,6 @@ async def test_node_replay_persists_real_png_before_ack(repo, tmp_path):
             "runtime": {
                 "headless": True,
                 "max_tool_calls": 40,
-                "allow_writes": True,
-                "allow_screenshots": True,
-                "path_prefix": "/",
             },
         }
 
