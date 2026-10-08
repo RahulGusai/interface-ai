@@ -55,6 +55,32 @@ export function recordDurableTarget(
       );
       return dynamicAt < 0 ? ancestry : ancestry.slice(0, dynamicAt);
     };
+    const parentRow = controls.find(
+      (c) => c.role === "row" && c.ref === control.parent_ref,
+    );
+    const suggestedCriteria = parentRow
+      ? Object.fromEntries(
+          Object.entries(variableInputs ?? {}).flatMap(
+            ([path, value]): [string, unknown][] => {
+              const ref = { kind: "input", path };
+              if (rowMatchesValues(parentRow, controls, { [path]: value }))
+                return [[path, ref]];
+              if (
+                typeof value === "string" &&
+                value.length > 1 &&
+                rowMatchesValues(parentRow, controls, {
+                  [path]: { operator: "ends_with", value },
+                })
+              )
+                return [[path, { operator: "ends_with", value: ref }]];
+              return [];
+            },
+          ),
+        )
+      : {};
+    const rowHint = Object.keys(suggestedCriteria).length
+      ? ` Criteria matching this selected row: "row_match":${JSON.stringify(suggestedCriteria)}. Check that this is the intended row.`
+      : " Use an object mapping input names to their input-reference objects, using only values present in this row.";
     if (
       !rowMatch &&
       inputValues.length &&
@@ -66,7 +92,7 @@ export function recordDurableTarget(
     )
       throw new SafeError(
         "ROW_MATCH_REQUIRED",
-        'row_match is required for a data-row action. Bind identifying criteria to the supplied inputs; for an identifier suffix use {operator:"ends_with",value:{kind:"input",path:"input_name"}}.',
+        "row_match is required for a data-row action." + rowHint,
       );
     if (control.role === "cell" && control.table_cell) {
       if (
@@ -75,7 +101,8 @@ export function recordDurableTarget(
       )
         throw new SafeError(
           "ROW_MATCH_REQUIRED",
-          'Bind this identity field\'s row_match to the identifying inputs. For a suffix use {operator:"ends_with",value:{kind:"input",path:"input_name"}}; do not save an identity field by row position.',
+          "Bind this identity field's row_match to the identifying inputs." +
+            rowHint,
         );
       if (rowMatch) {
         const rows = controls.filter(
@@ -114,7 +141,7 @@ export function recordDurableTarget(
       if (matchingRows.length !== 1 || matchingRows[0]?.ref !== row.ref)
         throw new SafeError(
           "ROW_SELECTION_MISMATCH",
-          'row_match does not identify the selected row. Match complete cell values or use {operator:"ends_with",value:input_reference} for an identifier suffix.',
+          "row_match does not identify the selected row." + rowHint,
         );
       const actionText = control.text?.trim();
       const actionName = actionText ? undefined : control.name;

@@ -187,6 +187,14 @@ it("reports the rejected extraction target and allows a corrected labeled source
     extractionSchema.properties.fields.items.properties.row_match,
   ).toBeDefined();
   expect(
+    extractionSchema.properties.fields.items.properties.row_match
+      .additionalProperties,
+  ).toBe(false);
+  expect(
+    extractionSchema.properties.fields.items.properties.row_match.properties
+      .account_suffix,
+  ).toBeDefined();
+  expect(
     JSON.stringify(
       extractionSchema.properties.fields.items.properties.row_match,
     ),

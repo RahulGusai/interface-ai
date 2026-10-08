@@ -110,6 +110,23 @@ export function resolveDiscoveryArguments(
 ) {
   if (["finish_task", "request_human"].includes(tool))
     return { resolved: raw, rowMatch: undefined };
+  const checkRowShape = (criteria: unknown) => {
+    if (
+      !criteria ||
+      typeof criteria !== "object" ||
+      Array.isArray(criteria) ||
+      !Object.keys(criteria).length ||
+      Object.keys(criteria).some((key) => !Object.hasOwn(declared, key))
+    )
+      throw new SafeError(
+        "ROW_MATCH_INVALID",
+        `row_match must map declared input names to binding objects. Valid keys: ${Object.keys(declared).join(", ")}. Do not put operator/value at the top level.`,
+      );
+  };
+  if (raw?.row_match) checkRowShape(raw.row_match);
+  if (tool === "extract_data" && Array.isArray(raw?.fields))
+    for (const field of raw.fields)
+      if (field.row_match) checkRowShape(field.row_match);
   const resolve = (value: any): any => {
     if (Array.isArray(value)) return value.map(resolve);
     if (!value || typeof value !== "object") return value;

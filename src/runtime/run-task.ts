@@ -30,7 +30,6 @@ import {
   discoveryExpressionJson,
   resolveDiscoveryArguments,
   assertBoundArguments,
-  rowCriterionJson,
   explicitDiscoveryExpression,
 } from "./discovery-bindings.js";
 import {
@@ -85,6 +84,48 @@ export async function runTask(
             ...discoveryExpressionJson,
             description: `Variable task values MUST use input references, never their example literals. Available references: ${JSON.stringify(refs)}. Templates may combine references with fixed text. Plain values are only for fixed constants.`,
           };
+          const rowSchema = {
+            type: "object",
+            minProperties: 1,
+            additionalProperties: false,
+            description:
+              "Map input names to binding objects for values visibly present in this row. Do not put operator/value at the top level. Example: " +
+              JSON.stringify(
+                Object.fromEntries(
+                  refs.slice(0, 1).map((ref) => [ref.path, ref]),
+                ),
+              ),
+            properties: Object.fromEntries(
+              refs.map((ref) => {
+                const bound = {
+                  type: "object",
+                  properties: {
+                    kind: { const: "input", type: "string" },
+                    path: { const: ref.path, type: "string" },
+                  },
+                  required: ["kind", "path"],
+                  additionalProperties: false,
+                };
+                return [
+                  ref.path,
+                  {
+                    oneOf: [
+                      bound,
+                      {
+                        type: "object",
+                        properties: {
+                          operator: { const: "ends_with", type: "string" },
+                          value: bound,
+                        },
+                        required: ["operator", "value"],
+                        additionalProperties: false,
+                      },
+                    ],
+                  },
+                ];
+              }),
+            ),
+          };
           if (name === "type_text")
             properties.text = {
               ...explicitDiscoveryExpression.toJSONSchema(),
@@ -92,11 +133,7 @@ export async function runTask(
               description: `${expression.description} Always send a JSON object, never a quoted/escaped object. For fixed text use {"kind":"literal","value":"fixed text"}.`,
             };
           if (["click", "type_text"].includes(name))
-            properties.row_match = {
-              type: "object",
-              minProperties: 1,
-              additionalProperties: rowCriterionJson,
-            };
+            properties.row_match = rowSchema;
           if (name === "select_option")
             properties.option = {
               ...original.option,
@@ -132,11 +169,10 @@ export async function runTask(
                 properties: {
                   ...original.fields.items.properties,
                   row_match: {
-                    type: "object",
-                    minProperties: 1,
-                    additionalProperties: rowCriterionJson,
+                    ...rowSchema,
                     description:
-                      "Bind identifying row criteria to inputs. For a ranked result, first sort/filter the table in the UI and omit row_match to retain its visible row position.",
+                      rowSchema.description +
+                      " For a ranked result, first sort/filter the table in the UI and omit row_match to retain its visible row position.",
                   },
                 },
               },

@@ -59,6 +59,39 @@ const capture = (names: string[]): Capture => ({
   },
 });
 
+it("rejects misplaced row operators and resolves named bound suffix criteria", () => {
+  const inputs = { suffix: "7106" },
+    declared = { suffix: { type: "string" } };
+  expect(() =>
+    resolveDiscoveryArguments(
+      "click",
+      {
+        row_match: {
+          operator: "ends_with",
+          value: { kind: "input", path: "suffix" },
+        },
+      },
+      inputs,
+      declared,
+    ),
+  ).toThrow("Do not put operator/value at the top level");
+  expect(
+    resolveDiscoveryArguments(
+      "click",
+      {
+        row_match: {
+          suffix: {
+            operator: "ends_with",
+            value: { kind: "input", path: "suffix" },
+          },
+        },
+      },
+      inputs,
+      declared,
+    ).rowMatch,
+  ).toEqual({ suffix: { operator: "ends_with", value: "7106" } });
+});
+
 it("records a row action without retaining the discovered identity and selects a fresh matching row", () => {
   const original = capture(["Freya", "Mira"]);
   const saved = recordDurableTarget(
