@@ -49,6 +49,7 @@ async function run(proposals: { name: string; args: unknown }[]) {
   const context = discovery();
   const audits: any[] = [];
   const histories: InternalMessage[][] = [];
+  const definitions: any[] = [];
   const result = await runTask(
     { goal: "Read the account ending 7106", targetUrl: "https://example.org" },
     {
@@ -113,7 +114,9 @@ async function run(proposals: { name: string; args: unknown }[]) {
       model: {
         model: "scripted",
         generateCapability: async () => metadata,
-        async complete(history) {
+        async complete(history, tools, options) {
+          definitions.push(tools);
+          expect(options?.toolChoice).toBe("required");
           histories.push([...history]);
           const next = proposals.shift();
           if (!next) throw Error("Unexpected extra model turn");
@@ -143,7 +146,7 @@ async function run(proposals: { name: string; args: unknown }[]) {
       },
     },
   );
-  return { result, adapter, context, audits, histories };
+  return { result, adapter, context, audits, histories, definitions };
 }
 
 it("reports the rejected extraction target and allows a corrected labeled source", async () => {
@@ -172,6 +175,26 @@ it("reports the rejected extraction target and allows a corrected labeled source
     1,
   );
   expect(s.result.status).toBe("goal_achieved");
+  expect(s.histories[0]?.[0]).toMatchObject({
+    role: "system",
+    content: expect.stringContaining('"path":"account_suffix"'),
+  });
+  expect(s.histories[0]?.filter((m) => m.role === "system")).toHaveLength(1);
+  const extractionSchema = s.definitions[0].find(
+    (d: any) => d.function.name === "extract_data",
+  ).function.parameters;
+  expect(
+    extractionSchema.properties.fields.items.properties.row_match,
+  ).toBeDefined();
+  expect(
+    JSON.stringify(
+      extractionSchema.properties.fields.items.properties.row_match,
+    ),
+  ).toContain("ends_with");
+  expect(
+    s.definitions[0].find((d: any) => d.function.name === "type_text").function
+      .parameters.properties.text.description,
+  ).toContain("account_suffix");
   expect(
     s.context.artifact?.definition.output_mapping.account_number,
   ).toMatchObject({ kind: "step_output" });

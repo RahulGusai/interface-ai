@@ -15,6 +15,13 @@ export const target = z.discriminatedUnion("kind", [
 export const controlSchema = z.strictObject({
   ref: z.string(),
   parent_ref: z.string().optional(),
+  table_cell: z
+    .strictObject({
+      columns: z.array(z.string()).min(1),
+      column_index: z.number().int().nonnegative(),
+      row_index: z.number().int().nonnegative(),
+    })
+    .optional(),
   role: z.string(),
   name: z.string(),
   state: z.strictObject({

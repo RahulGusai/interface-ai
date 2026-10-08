@@ -5,6 +5,32 @@ import { toolDefinitions } from "../../src/contracts/tools.js";
 const config = { apiKey: "SECRET", model: "provider/exact-model" };
 const turn = (message: unknown) =>
   new Response(JSON.stringify({ choices: [{ message }] }));
+it("requires a tool response and exposes protocol structure without response values", async () => {
+  let body: any;
+  const client = new OpenRouterClient(config, async (_url, options) => {
+    body = JSON.parse(String(options?.body));
+    return turn({
+      tool_calls: [
+        {
+          id: "a",
+          type: "function",
+          function: {
+            name: "observe_ui",
+            arguments: { private: "SECRET_VALUE" },
+          },
+        },
+      ],
+    });
+  });
+  const error = await client
+    .complete([], toolDefinitions, { toolChoice: "required" })
+    .catch((e) => e);
+  expect(body.tool_choice).toBe("required");
+  expect(error.message).toContain(
+    "choices.0.message.tool_calls.0.function.arguments",
+  );
+  expect(error.message).not.toContain("SECRET_VALUE");
+});
 it("requests typed capability metadata before discovery with a forced metadata tool", async () => {
   let request: any;
   const client = new OpenRouterClient(config, async (_url, options) => {

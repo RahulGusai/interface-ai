@@ -128,6 +128,14 @@ export const captureContext = z.strictObject({
 });
 export const durableTarget = z.discriminatedUnion("kind", [
   z.strictObject({
+    kind: z.literal("table_cell"),
+    columns: z.array(z.string()).min(1),
+    column_index: z.number().int().nonnegative(),
+    row_index: z.number().int().nonnegative().nullable(),
+    scope: z.array(scope).nullable(),
+    required_matches: z.literal(1),
+  }),
+  z.strictObject({
     kind: z.literal("row_action"),
     row_role: z.literal("row"),
     action_role: z.string().min(1),

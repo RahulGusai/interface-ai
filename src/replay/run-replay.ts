@@ -232,8 +232,11 @@ export async function runReplay(
       await withRecovery(s.pre_checks);
       let capture = await fresh();
       if (capture.observation.status !== "ok") throw Error("CAPTURE_FAILED");
-      const resolve = async (saved: any) => {
-        const r = resolveTarget(saved, capture, assets, c);
+      const resolve = async (
+        saved: any,
+        rowMatch?: Record<string, unknown>,
+      ) => {
+        const r = resolveTarget(saved, capture, assets, c, rowMatch);
         await audit(
           "target_resolution_finished",
           r.diagnosis,
@@ -248,14 +251,15 @@ export async function runReplay(
       if (s.tool === "extract_data") {
         args = { fields: [] };
         for (const field of s.arguments.fields) {
+          const { target, row_match, ...fieldArguments } = field;
           args.fields.push({
             ...resolveBindings(
-              { ...field, target: undefined },
+              fieldArguments,
               inputs,
               results,
               c.environment,
             ),
-            target: await resolve(field.target),
+            target: await resolve(target, row_match),
           });
         }
       } else {

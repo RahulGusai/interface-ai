@@ -49,7 +49,48 @@ export function resolveTarget(
   let candidates: any[] = [];
   try {
     if (capture.observation.status !== "ok") throw Error("CAPTURE_FAILED");
-    if (target.kind === "row_action") {
+    if (target.kind === "table_cell") {
+      if (capture.observation.controls.status !== "available")
+        throw Error("CAPTURE_FAILED");
+      const controls = capture.observation.controls.items;
+      const criteria = rowMatch
+        ? resolveBindings(rowMatch, c.inputs, c.results, c.environment)
+        : undefined;
+      if (target.row_index === null && !criteria)
+        throw Error("ROW_MATCH_REQUIRED");
+      candidates = controls.filter(
+        (control) =>
+          control.role === "cell" &&
+          control.table_cell?.column_index === target.column_index &&
+          JSON.stringify(control.table_cell.columns) ===
+            JSON.stringify(target.columns) &&
+          (!target.scope ||
+            target.scope.every(
+              (s, i) =>
+                control.ancestry?.[i]?.name === s.name &&
+                control.ancestry?.[i]?.role === s.role,
+            )) &&
+          (criteria
+            ? controls.some(
+                (row) =>
+                  row.ref === control.parent_ref &&
+                  row.role === "row" &&
+                  rowMatchesValues(row, controls, criteria),
+              )
+            : control.table_cell.row_index === target.row_index),
+      );
+      if (candidates.length === 1)
+        return {
+          target: { kind: "control", control_ref: candidates[0].ref },
+          diagnosis: {
+            verdict: "resolved",
+            target,
+            candidates,
+            required_matches: 1,
+            observed: { count: 1 },
+          },
+        };
+    } else if (target.kind === "row_action") {
       if (
         !rowMatch ||
         !Object.keys(rowMatch).length ||

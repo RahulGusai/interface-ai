@@ -30,6 +30,7 @@ import {
   discoveryExpressionJson,
   resolveDiscoveryArguments,
   assertBoundArguments,
+  rowCriterionJson,
 } from "./discovery-bindings.js";
 import {
   toolDefinitions,
@@ -68,56 +69,81 @@ export async function runTask(
   let auditFailed = false;
   let currentCapture: Capture | undefined;
   let rejectedExtraction: unknown;
-  const definitions = options.discovery
-    ? toolDefinitions.map((d) => {
-        const name = d.function.name;
-        const original = (d.function.parameters as any).properties;
-        const properties: Record<string, any> = { ...original };
-        if (["click", "type_text", "scroll"].includes(name))
-          properties.recording_hint = recordingHint.toJSONSchema();
-        if (name === "type_text") properties.text = discoveryExpressionJson;
-        if (["click", "type_text"].includes(name))
-          properties.row_match = {
-            type: "object",
-            minProperties: 1,
-            additionalProperties: discoveryExpressionJson,
+  const getDefinitions = () =>
+    options.discovery
+      ? toolDefinitions.map((d) => {
+          const name = d.function.name;
+          const original = (d.function.parameters as any).properties;
+          const properties: Record<string, any> = { ...original };
+          if (["click", "type_text", "scroll"].includes(name))
+            properties.recording_hint = recordingHint.toJSONSchema();
+          const refs = Object.keys(
+            options.discovery!.metadata?.input_schema.properties ?? {},
+          ).map((path) => ({ kind: "input", path }));
+          const expression = {
+            ...discoveryExpressionJson,
+            description: `Variable task values MUST use input references, never their example literals. Available references: ${JSON.stringify(refs)}. Templates may combine references with fixed text. Plain values are only for fixed constants.`,
           };
-        if (name === "select_option")
-          properties.option = {
-            ...original.option,
-            properties: {
-              ...original.option.properties,
-              label: discoveryExpressionJson,
+          if (name === "type_text") properties.text = expression;
+          if (["click", "type_text"].includes(name))
+            properties.row_match = {
+              type: "object",
+              minProperties: 1,
+              additionalProperties: rowCriterionJson,
+            };
+          if (name === "select_option")
+            properties.option = {
+              ...original.option,
+              properties: {
+                ...original.option.properties,
+                label: expression,
+              },
+            };
+          if (["check_ui", "wait_for"].includes(name))
+            properties.condition = {
+              oneOf: original.condition.oneOf.map((variant: any) =>
+                variant.properties.expected
+                  ? {
+                      ...variant,
+                      properties: {
+                        ...variant.properties,
+                        expected: expression,
+                      },
+                    }
+                  : variant,
+              ),
+            };
+          if (name === "press_key")
+            properties.keys = {
+              ...original.keys,
+              items: expression,
+            };
+          if (name === "extract_data")
+            properties.fields = {
+              ...original.fields,
+              items: {
+                ...original.fields.items,
+                properties: {
+                  ...original.fields.items.properties,
+                  row_match: {
+                    type: "object",
+                    minProperties: 1,
+                    additionalProperties: rowCriterionJson,
+                    description:
+                      "Bind identifying row criteria to inputs. For a ranked result, first sort/filter the table in the UI and omit row_match to retain its visible row position.",
+                  },
+                },
+              },
+            };
+          return {
+            ...d,
+            function: {
+              ...d.function,
+              parameters: { ...d.function.parameters, properties },
             },
           };
-        if (["check_ui", "wait_for"].includes(name))
-          properties.condition = {
-            oneOf: original.condition.oneOf.map((variant: any) =>
-              variant.properties.expected
-                ? {
-                    ...variant,
-                    properties: {
-                      ...variant.properties,
-                      expected: discoveryExpressionJson,
-                    },
-                  }
-                : variant,
-            ),
-          };
-        if (name === "press_key")
-          properties.keys = {
-            ...original.keys,
-            items: discoveryExpressionJson,
-          };
-        return {
-          ...d,
-          function: {
-            ...d.function,
-            parameters: { ...d.function.parameters, properties },
-          },
-        };
-      })
-    : toolDefinitions;
+        })
+      : toolDefinitions;
   const audit: AuditSink = async (record, image) => {
     if (auditFailed) throw new Error("Audit unavailable");
     try {
@@ -136,6 +162,7 @@ export async function runTask(
     let hint: any;
     let resolved: any;
     let rowMatch: Record<string, unknown> | undefined;
+    let fieldRowMatches: (Record<string, unknown> | undefined)[] | undefined;
     let preflight: ToolResponse | undefined;
     try {
       parsed = JSON.parse(call.argumentsJson);
@@ -148,7 +175,7 @@ export async function runTask(
         delete parsed.recording_hint;
       }
       try {
-        ({ resolved, rowMatch } = resolveDiscoveryArguments(
+        ({ resolved, rowMatch, fieldRowMatches } = resolveDiscoveryArguments(
           call.name,
           parsed,
           options.discovery.inputs,
@@ -233,7 +260,7 @@ export async function runTask(
                   f.target,
                   currentCapture!,
                   undefined,
-                  undefined,
+                  fieldRowMatches?.[index],
                   options.discovery!.inputs,
                 ).target,
               ];
@@ -433,17 +460,28 @@ export async function runTask(
       maxToolCalls: budget,
       toolCallsUsed: 0,
     };
-    if (options.discovery)
-      context.history.messages.push({
-        role: "system",
-        content: JSON.stringify({
-          instructions: DISCOVERY_PROMPT,
+    if (options.discovery) {
+      const system = context.history.messages[0];
+      if (system?.role !== "system") throw Error("SYSTEM_PROMPT_REQUIRED");
+      system.content +=
+        "\n\n" +
+        DISCOVERY_PROMPT +
+        "\nUse these exact input references for variable values:\n" +
+        JSON.stringify(
+          Object.entries(options.discovery.inputs).map(([path, example]) => ({
+            example,
+            reference: { kind: "input", path },
+          })),
+        ) +
+        "\nDiscovery context:\n" +
+        JSON.stringify({
           deployment: options.discovery.deployment,
           capability_catalog: options.discovery.capability_catalog,
           capability_metadata: options.discovery.metadata,
           requested_inputs: options.discovery.inputs,
-        }),
-      });
+        });
+    }
+    const definitions = getDefinitions();
     const bootstrap = await invoke(
       {
         id: "bootstrap",
@@ -487,7 +525,10 @@ export async function runTask(
           await deps.model.complete(
             context.history.messages.map((m) => m),
             definitions,
-            { signal: options.signal },
+            {
+              signal: options.signal,
+              ...(options.discovery ? { toolChoice: "required" } : {}),
+            },
           ),
         );
       } catch (cause) {

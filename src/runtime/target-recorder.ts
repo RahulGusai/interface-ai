@@ -55,6 +55,48 @@ export function recordDurableTarget(
       );
       return dynamicAt < 0 ? ancestry : ancestry.slice(0, dynamicAt);
     };
+    if (
+      !rowMatch &&
+      inputValues.length &&
+      ["link", "button", "textbox"].includes(control.role) &&
+      control.parent_ref &&
+      controls.some(
+        (c) => c.parent_ref === control.parent_ref && c.role === "cell",
+      )
+    )
+      throw new SafeError(
+        "ROW_MATCH_REQUIRED",
+        'row_match is required for a data-row action. Bind identifying criteria to the supplied inputs; for an identifier suffix use {operator:"ends_with",value:{kind:"input",path:"input_name"}}.',
+      );
+    if (control.role === "cell" && control.table_cell) {
+      if (
+        !rowMatch &&
+        inputValues.some((value) => control.name.toLowerCase().includes(value))
+      )
+        throw new SafeError(
+          "ROW_MATCH_REQUIRED",
+          'Bind this identity field\'s row_match to the identifying inputs. For a suffix use {operator:"ends_with",value:{kind:"input",path:"input_name"}}; do not save an identity field by row position.',
+        );
+      if (rowMatch) {
+        const rows = controls.filter(
+          (c) => c.role === "row" && rowMatchesValues(c, controls, rowMatch),
+        );
+        if (rows.length !== 1 || rows[0]?.ref !== control.parent_ref)
+          throw new SafeError(
+            "ROW_SELECTION_MISMATCH",
+            "row_match must identify exactly the selected table row. Use more criteria if necessary.",
+          );
+      }
+      return {
+        target: {
+          kind: "table_cell",
+          ...control.table_cell,
+          row_index: rowMatch ? null : control.table_cell.row_index,
+          scope: stableAncestry(control.ancestry),
+          required_matches: 1,
+        },
+      };
+    }
     if (rowMatch && Object.keys(rowMatch).length) {
       const row = controls.find(
         (item) => item.ref === control.parent_ref && item.role === "row",
@@ -64,9 +106,16 @@ export function recordDurableTarget(
         (item) =>
           item.role === "row" && rowMatchesValues(item, controls, rowMatch),
       );
-      if (matchingRows.length > 1) throw Error("ROW_SELECTION_AMBIGUOUS");
+      if (matchingRows.length > 1)
+        throw new SafeError(
+          "ROW_SELECTION_AMBIGUOUS",
+          "ROW_SELECTION_AMBIGUOUS: row_match identifies multiple rows; add a distinguishing criterion from the current observation.",
+        );
       if (matchingRows.length !== 1 || matchingRows[0]?.ref !== row.ref)
-        throw Error("ROW_SELECTION_MISMATCH");
+        throw new SafeError(
+          "ROW_SELECTION_MISMATCH",
+          'row_match does not identify the selected row. Match complete cell values or use {operator:"ends_with",value:input_reference} for an identifier suffix.',
+        );
       const actionText = control.text?.trim();
       const actionName = actionText ? undefined : control.name;
       if (!actionText && !actionName) throw Error("ROW_ACTION_UNSUPPORTED");

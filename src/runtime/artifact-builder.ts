@@ -83,7 +83,11 @@ export function buildArtifact(
       args.fields = record.input.fields.map((f: any) => {
         const target = record.input._durable_fields?.[f.name];
         if (!target) throw Error("RECORDED_EXTRACTION_TARGET_MISSING");
-        return { ...f, target: structuredClone(target) };
+        return {
+          ...f,
+          ...(f.row_match ? { row_match: argumentBinding(f.row_match) } : {}),
+          target: structuredClone(target),
+        };
       });
     }
     if (record.input.target && !record.target)

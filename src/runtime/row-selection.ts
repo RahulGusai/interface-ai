@@ -19,9 +19,23 @@ export function rowMatchesValues(
         .map(normalize),
     );
   if (!candidates.length) candidates.push(normalize(row.text ?? row.name));
-  return Object.values(values).every(
-    (value) =>
+  return Object.values(values).every((value) => {
+    if (
+      value &&
+      typeof value === "object" &&
+      "operator" in value &&
+      "value" in value
+    ) {
+      const expected = normalize(value.value);
+      return (
+        value.operator === "ends_with" &&
+        expected.length > 0 &&
+        candidates.some((candidate) => candidate.endsWith(expected))
+      );
+    }
+    return (
       ["string", "number", "boolean"].includes(typeof value) &&
-      candidates.includes(normalize(value)),
-  );
+      candidates.includes(normalize(value))
+    );
+  });
 }

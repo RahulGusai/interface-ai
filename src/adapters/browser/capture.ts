@@ -107,6 +107,43 @@ export async function readSemantics(
       state.checked = input.checked;
     if (e.hasAttribute("aria-expanded"))
       state.expanded = e.getAttribute("aria-expanded") === "true";
+    let tableCell: Control["table_cell"];
+    if (e instanceof HTMLTableCellElement && tag === "td") {
+      const table = e.closest("table");
+      const row = e.parentElement;
+      if (table && row instanceof HTMLTableRowElement) {
+        const header = Array.from(table.rows).find((r) =>
+          Array.from(r.cells).some((c) => c.tagName === "TH"),
+        );
+        const rows = Array.from(table.rows).filter((r) => {
+          const bounds = r.getBoundingClientRect();
+          const style = getComputedStyle(r);
+          return (
+            Array.from(r.cells).some((c) => c.tagName === "TD") &&
+            bounds.width > 0 &&
+            bounds.height > 0 &&
+            style.display !== "none" &&
+            style.visibility !== "hidden" &&
+            !r.closest('[aria-hidden="true"]')
+          );
+        });
+        if (
+          header &&
+          rows.indexOf(row) >= 0 &&
+          Array.from(header.cells).every((c) => c.colSpan === 1) &&
+          Array.from(row.cells).every((c) => c.colSpan === 1 && c.rowSpan === 1)
+        )
+          tableCell = {
+            columns: Array.from(header.cells).map((c) =>
+              (c.innerText || c.textContent || "")
+                .replace(/[▲▼△▽↑↓]/g, "")
+                .trim(),
+            ),
+            column_index: e.cellIndex,
+            row_index: rows.indexOf(row),
+          };
+      }
+    }
     const ancestry: { role: string; name: string; exact: true }[] = [];
     for (let p = e.parentElement; p; p = p.parentElement) {
       const role =
@@ -117,6 +154,7 @@ export async function readSemantics(
             fieldset: "group",
             nav: "navigation",
             section: "region",
+            table: "table",
           } as Record<string, string>
         )[p.tagName.toLowerCase()];
       const name =
@@ -134,6 +172,7 @@ export async function readSemantics(
       role,
       name,
       state,
+      ...(tableCell ? { table_cell: tableCell } : {}),
       text: (e as HTMLElement).innerText?.replace(/\r\n?/g, "\n"),
       ancestry,
       ...("value" in e && input.type !== "password"

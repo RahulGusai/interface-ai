@@ -29,6 +29,11 @@ export function assertBoundArguments(
   const values: [string, unknown][] = [];
   if (tool === "type_text") values.push(["text", raw.text]);
   if (raw.row_match) values.push(["row_match", raw.row_match]);
+  if (tool === "extract_data")
+    raw.fields?.forEach((field: any, index: number) => {
+      if (field.row_match)
+        values.push([`fields.${index}.row_match`, field.row_match]);
+    });
   if (tool === "select_option")
     values.push(["option.label", raw.option?.label]);
   if (["check_ui", "wait_for"].includes(tool))
@@ -45,7 +50,7 @@ export function assertBoundArguments(
   if (invalid)
     throw new SafeError(
       "UNBOUND_INPUT_ARGUMENT",
-      `UNBOUND_INPUT_ARGUMENT: ${invalid} contains a variable example value. Use {kind:"input",path:"input_name"} or a template with the names in capability_metadata.input_schema; keep fixed values plain.`,
+      `UNBOUND_INPUT_ARGUMENT: ${invalid} contains a variable example value. Replace it with an input reference or template; keep fixed values plain. Available references: ${JSON.stringify(Object.keys(inputs).map((path) => ({ kind: "input", path })))}`,
     );
 }
 
@@ -66,6 +71,28 @@ export const discoveryExpression = z.union([
   input,
   template,
 ]);
+const resolvedRowMatch = z.record(
+  z.string(),
+  z.union([
+    z.string(),
+    z.number().finite(),
+    z.boolean(),
+    z.strictObject({
+      operator: z.literal("ends_with"),
+      value: z.string().min(1),
+    }),
+  ]),
+);
+export const rowCriterionJson = z.toJSONSchema(
+  z.union([
+    discoveryExpression,
+    z.strictObject({
+      operator: z.literal("ends_with"),
+      value: discoveryExpression,
+    }),
+  ]),
+  { io: "input" },
+);
 
 export function resolveDiscoveryArguments(
   tool: string,
@@ -110,12 +137,19 @@ export function resolveDiscoveryArguments(
     )
       throw Error("ROW_MATCH_INVALID");
     rowMatch = resolved.row_match;
-    for (const value of Object.values(rowMatch!))
-      if (!["string", "number", "boolean"].includes(typeof value))
-        throw Error("ROW_MATCH_INVALID");
+    rowMatch = resolvedRowMatch.parse(rowMatch);
     delete resolved.row_match;
   }
-  return { resolved, rowMatch };
+  const fieldRowMatches: (Record<string, unknown> | undefined)[] = [];
+  if (tool === "extract_data" && Array.isArray(resolved.fields)) {
+    for (const field of resolved.fields) {
+      fieldRowMatches.push(
+        field.row_match ? resolvedRowMatch.parse(field.row_match) : undefined,
+      );
+      delete field.row_match;
+    }
+  }
+  return { resolved, rowMatch, fieldRowMatches };
 }
 
 export const discoveryExpressionJson = z.toJSONSchema(discoveryExpression, {

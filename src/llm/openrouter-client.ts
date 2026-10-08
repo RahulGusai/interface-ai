@@ -167,10 +167,13 @@ export class OpenRouterClient implements ModelClient {
             tools,
             ...(options.toolChoice
               ? {
-                  tool_choice: {
-                    type: "function",
-                    function: { name: options.toolChoice },
-                  },
+                  tool_choice:
+                    options.toolChoice === "required"
+                      ? "required"
+                      : {
+                          type: "function",
+                          function: { name: options.toolChoice },
+                        },
                 }
               : {}),
             parallel_tool_calls: false,
@@ -230,7 +233,11 @@ export class OpenRouterClient implements ModelClient {
           },
         });
       }
-      if (typeof m.content !== "string" || !m.content.trim()) throw new Error();
+      if (typeof m.content !== "string" || !m.content.trim())
+        throw new SafeError(
+          "PROVIDER_EMPTY_RESPONSE",
+          "Invalid provider response: neither tool calls nor final text",
+        );
       return agentTurnSchema.parse({
         kind: "final_text",
         text: m.content,
@@ -238,7 +245,19 @@ export class OpenRouterClient implements ModelClient {
       });
     } catch (error) {
       if (error instanceof SafeError) throw error;
-      throw new SafeError("PROVIDER_PROTOCOL", "Invalid provider response");
+      const detail =
+        error instanceof z.ZodError
+          ? error.issues
+              .map(
+                (issue) =>
+                  `${issue.path.join(".") || "response"} (${issue.code})`,
+              )
+              .join("; ")
+          : "response correspondence";
+      throw new SafeError(
+        "PROVIDER_PROTOCOL",
+        `Invalid provider response: ${detail}`,
+      );
     }
   }
 }
