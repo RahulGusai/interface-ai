@@ -28,9 +28,14 @@ export function rowMatchesValues(
     ) {
       const expected = normalize(value.value);
       return (
-        value.operator === "ends_with" &&
         expected.length > 0 &&
-        candidates.some((candidate) => candidate.endsWith(expected))
+        candidates.some((candidate) =>
+          value.operator === "ends_with"
+            ? candidate.endsWith(expected)
+            : value.operator === "contains"
+              ? candidate.includes(expected)
+              : false,
+        )
       );
     }
     return (

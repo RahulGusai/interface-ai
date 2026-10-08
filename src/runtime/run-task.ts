@@ -114,7 +114,10 @@ export async function runTask(
                       {
                         type: "object",
                         properties: {
-                          operator: { const: "ends_with", type: "string" },
+                          operator: {
+                            enum: ["ends_with", "contains"],
+                            type: "string",
+                          },
                           value: bound,
                         },
                         required: ["operator", "value"],

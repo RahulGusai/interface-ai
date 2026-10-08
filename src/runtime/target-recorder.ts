@@ -73,6 +73,14 @@ export function recordDurableTarget(
                 })
               )
                 return [[path, { operator: "ends_with", value: ref }]];
+              if (
+                typeof value === "string" &&
+                value.length > 1 &&
+                rowMatchesValues(parentRow, controls, {
+                  [path]: { operator: "contains", value },
+                })
+              )
+                return [[path, { operator: "contains", value: ref }]];
               return [];
             },
           ),

@@ -536,3 +536,50 @@ it("rejects saved literal business outputs for parameterized capabilities", () =
     "UNBOUND_INPUT_ARGUMENT",
   );
 });
+
+it("binds decorated names and account numbers inside compound cells without losing uniqueness", () => {
+  const observed = capture(["Freya SAME NAME", "Freya SAME NAME"]);
+  const controls = (observed.observation as any).controls.items;
+  controls.find((c: any) => c.ref === "id0").text = "012-9637106, 063-5641431";
+  controls.find((c: any) => c.ref === "id1").text = "091-6855475, 027-5566564";
+  const raw = {
+    row_match: {
+      customer: {
+        operator: "contains",
+        value: { kind: "input", path: "customer" },
+      },
+      suffix: {
+        operator: "contains",
+        value: { kind: "input", path: "suffix" },
+      },
+    },
+  };
+  const inputs = { customer: "Freya", suffix: "7106" };
+  const resolved = resolveDiscoveryArguments("click", raw, inputs, inputs);
+  const saved = recordDurableTarget(
+    { kind: "control", control_ref: "open0" },
+    observed,
+    undefined,
+    resolved.rowMatch,
+    inputs,
+  ).target;
+  expect(JSON.stringify(saved)).not.toContain("Freya");
+  const replay = (suffix: string) =>
+    resolveTarget(
+      saved,
+      observed,
+      new Map(),
+      {
+        inputs: { customer: "Freya", suffix },
+        results: {},
+        environment: { base_url: "https://example.org" },
+      },
+      raw.row_match,
+    );
+  expect(replay("5475").target).toEqual({
+    kind: "control",
+    control_ref: "open1",
+  });
+  expect(replay("9999").diagnosis.reason).toBe("TARGET_NOT_FOUND");
+  expect(replay("0").diagnosis.reason).toBe("TARGET_AMBIGUOUS");
+});

@@ -86,7 +86,7 @@ const resolvedRowMatch = z.record(
     z.number().finite(),
     z.boolean(),
     z.strictObject({
-      operator: z.literal("ends_with"),
+      operator: z.enum(["ends_with", "contains"]),
       value: z.string().min(1),
     }),
   ]),
@@ -95,7 +95,7 @@ export const rowCriterionJson = z.toJSONSchema(
   z.union([
     discoveryExpression,
     z.strictObject({
-      operator: z.literal("ends_with"),
+      operator: z.enum(["ends_with", "contains"]),
       value: discoveryExpression,
     }),
   ]),
