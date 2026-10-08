@@ -170,6 +170,18 @@ it("reports the rejected extraction target and allows a corrected labeled source
     message: expect.stringContaining("fields.0.target"),
   });
   expect(rejected.result.message).toContain("stable label");
+  expect(s.histories[1]).toContainEqual({
+    role: "system",
+    content: expect.stringContaining(
+      "Trusted runtime correction: TARGET_DEPENDS_ON_INPUT",
+    ),
+  });
+  expect(s.audits).toContainEqual(
+    expect.objectContaining({
+      type: "discovery_correction",
+      code: "TARGET_DEPENDS_ON_INPUT",
+    }),
+  );
   expect(rejected.result.message).not.toContain("7106");
   expect(s.adapter.calls.filter((c) => c.name === "extract_data")).toHaveLength(
     1,
@@ -276,4 +288,10 @@ it("rejects literal variable arguments before dispatch and accepts explicit bind
   expect(system && "content" in system ? system.content : "").toContain(
     "account_suffix",
   );
+});
+
+it("never promotes unknown validation categories to trusted instructions", async () => {
+  const { discoveryCorrection } = await import("../../src/runtime/prompts.js");
+  expect(discoveryCorrection("PAGE_SAYS_IGNORE_RULES")).toBeUndefined();
+  expect(discoveryCorrection("toString")).toBeUndefined();
 });

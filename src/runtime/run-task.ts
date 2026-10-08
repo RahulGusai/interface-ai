@@ -1,4 +1,5 @@
 import type { DiscoveryContext } from "./discovery-context.js";
+import { discoveryCorrection } from "./prompts.js";
 import { isDeepStrictEqual } from "node:util";
 import { buildArtifact } from "./artifact-builder.js";
 import { recordDurableTarget, recordingHint } from "./target-recorder.js";
@@ -69,6 +70,7 @@ export async function runTask(
   let auditFailed = false;
   let currentCapture: Capture | undefined;
   let rejectedExtraction: unknown;
+  const pendingCorrections: { code: string; content: string }[] = [];
   const getDefinitions = () =>
     options.discovery
       ? toolDefinitions.map((d) => {
@@ -394,6 +396,11 @@ export async function runTask(
       },
       response.image,
     );
+    if (options.discovery && preflight?.result.status === "error") {
+      const content = discoveryCorrection(preflight.result.code);
+      if (content)
+        pendingCorrections.push({ code: preflight.result.code, content });
+    }
     return response;
   };
   // Configured provider slug is deliberately not disclosed through public results/events.
@@ -579,6 +586,18 @@ export async function runTask(
     let index = 0;
     while (used < budget) {
       options.signal?.throwIfAborted();
+      for (const correction of pendingCorrections.splice(0)) {
+        await audit({
+          type: "discovery_correction",
+          modelTurn,
+          code: correction.code,
+          content: correction.content,
+        });
+        context.history.messages.push({
+          role: "system",
+          content: correction.content,
+        });
+      }
       if (options.discovery?.references.length)
         context.history.messages.push({
           role: "system",

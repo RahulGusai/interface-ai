@@ -14,6 +14,12 @@ import type { CapabilityMetadata } from "./capability-metadata.js";
 
 export type AuditRecord =
   | {
+      type: "discovery_correction";
+      modelTurn: number;
+      code: string;
+      content: string;
+    }
+  | {
       type: "capability_metadata_generated";
       metadata: CapabilityMetadata;
       inputs: Record<string, unknown>;

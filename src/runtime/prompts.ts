@@ -23,3 +23,23 @@ export function buildInitialMessages(
     },
   ];
 }
+
+// Only runtime-authored validation categories get higher-priority repair guidance.
+// Never copy browser text or arbitrary tool/provider errors into these messages.
+export function discoveryCorrection(code: string): string | undefined {
+  const guidance: Record<string, string> = {
+    TARGET_DEPENDS_ON_INPUT:
+      "The rejected extraction was not executed. On your next call, select a different reusable source, or navigate back to the page containing the requested facts. For account details, return to the account overview and extract account number and ledger/current balance from separate table cells with bound row_match. Do not retry the rejected summary control. Preserve transaction facts separately. An unchanged retry will stop this run.",
+    UNBOUND_INPUT_ARGUMENT:
+      "The rejected call was not executed. Replace variable literals with actual input-reference objects. Never stringify references or replace an input with an observed spelling. A row_match criterion must use the input reference with the same name as its key. Omit a nonmatching criterion only if the remaining bound criteria uniquely identify the intended row.",
+    ROW_MATCH_REQUIRED:
+      "The rejected call was not executed. Add row_match to the data-row action or extraction field. Use declared input references; use contains for compound cells and ends_with for suffixes. Use only criteria visibly matching the selected row, and require a unique match.",
+    ROW_MATCH_INVALID:
+      "The rejected call was not executed. Each row_match key must be a declared input name. Its value is {kind:input,path:that_name} or {operator:contains or ends_with,value:{kind:input,path:that_name}}. No literal row criteria or top-level operator/value keys are allowed.",
+    ROW_SELECTION_MISMATCH:
+      "The rejected call was not executed. Remove criteria that do not match the selected row, while retaining sufficient bound criteria for a unique match. A branch spelling mismatch must not make you repeat the same failing row_match or replace it with a literal. Use a bound unique account suffix to distinguish the customer when that identifies the intended row.",
+  };
+  return Object.hasOwn(guidance, code)
+    ? `Trusted runtime correction: ${code}. ${guidance[code]}`
+    : undefined;
+}

@@ -475,3 +475,47 @@ it("preserves screenshots and rejects missing image bytes or private protocol me
     }),
   ).toThrow();
 });
+it("projects runtime corrections into the leading system message without mutating canonical history", () => {
+  const history = new ConversationHistory([
+    { role: "system", content: "Base rules" },
+    { role: "user", content: "Task" },
+  ]);
+  history.messages.push({
+    role: "system",
+    content: "Trusted runtime correction: test",
+  });
+  const before = structuredClone(history.messages);
+  expect(history.toOpenRouterMessages()).toEqual([
+    {
+      role: "system",
+      content: "Base rules\n\nTrusted runtime correction: test",
+    },
+    { role: "user", content: "Task" },
+  ]);
+  expect(history.messages).toEqual(before);
+});
+
+it("expires trusted correction instructions after the corrected model turn while retaining the audit history", () => {
+  const history = new ConversationHistory([
+    { role: "system", content: "Base rules" },
+    { role: "system", content: "Trusted runtime correction: test" },
+  ]);
+  history.appendAssistantToolCalls({
+    role: "assistant",
+    content: null,
+    tool_calls: [{ id: "corrected", name: "observe_ui", argumentsJson: "{}" }],
+  });
+  history.appendToolResult("corrected", {
+    status: "error",
+    code: "TEST",
+    message: "result",
+  });
+  expect(history.toOpenRouterMessages()[0]).toEqual({
+    role: "system",
+    content: "Base rules",
+  });
+  expect(history.messages[1]).toEqual({
+    role: "system",
+    content: "Trusted runtime correction: test",
+  });
+});

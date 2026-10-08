@@ -135,10 +135,29 @@ export function projectMessages(messages: InternalMessage[]): unknown[] {
     }
   }
   // Images following tool results are placed after the entire tool batch to preserve provider protocol.
-  const output: unknown[] = [];
+  const latestAssistantIndex = messages.findLastIndex(
+    (m) => m.role === "assistant",
+  );
+  const systemContent = messages
+    .filter(
+      (m, index) =>
+        m.role !== "system" ||
+        !m.content.startsWith("Trusted runtime correction:") ||
+        index > latestAssistantIndex,
+    )
+    .filter(
+      (m): m is Extract<InternalMessage, { role: "system" | "user" }> =>
+        m.role === "system",
+    )
+    .map((m) => m.content)
+    .join("\n\n");
+  const output: unknown[] = systemContent
+    ? [{ role: "system", content: systemContent }]
+    : [];
   let remaining = 0;
   const images: unknown[] = [];
   for (const m of messages) {
+    if (m.role === "system") continue;
     if (m.role === "observation") {
       if (!m.image.bytes?.length)
         throw new SafeError("MISSING_IMAGE", "Missing image bytes");
