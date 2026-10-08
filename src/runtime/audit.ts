@@ -23,6 +23,7 @@ export type AuditRecord =
   | {
       type: "provider_failed";
       modelTurn: number;
+      stage?: "capability_metadata";
       error: { code: string; message: string };
       elapsedMs: number;
     }

@@ -5,8 +5,9 @@ import { agentTurnSchema, type AgentTurn } from "../contracts/run.js";
 import { SafeError } from "../contracts/errors.js";
 import type { toolDefinitions } from "../contracts/tools.js";
 import {
-  capabilityMetadataSchema,
-  parseCapabilityMetadata,
+  capabilityDefinitionSchema,
+  buildCapabilityMetadata,
+  capabilityMetadataError,
 } from "../runtime/capability-metadata.js";
 const responseSchema = z.object({
   choices: z
@@ -97,7 +98,9 @@ export class OpenRouterClient implements ModelClient {
           name: "define_capability",
           description:
             "Provide concise reusable capability metadata and typed example inputs extracted from the task",
-          parameters: z.toJSONSchema(capabilityMetadataSchema, { io: "input" }),
+          parameters: z.toJSONSchema(capabilityDefinitionSchema, {
+            io: "input",
+          }),
         },
       },
     ];
@@ -106,7 +109,7 @@ export class OpenRouterClient implements ModelClient {
         {
           role: "system",
           content:
-            "Define the reusable operation before browser discovery. Extract variable example inputs from the task. Use concise name and description without example-specific identities. Call define_capability once. Do not invent values missing from the task.",
+            "Define the reusable operation before browser discovery. Extract variable example inputs from the task and include all suppliedInputs. Return each input once with a name, description, and primitive example value. Use strings for identifiers, account numbers or suffixes (preserving leading zeros), dates, and periods; numbers for quantities; booleans for switches. Use concise name and description without example-specific identities. Call define_capability once. Do not invent values missing from the task. The runtime constructs the typed input schema from your examples.",
         },
         { role: "user", content: JSON.stringify({ goal, suppliedInputs }) },
       ],
@@ -123,12 +126,9 @@ export class OpenRouterClient implements ModelClient {
         "Capability metadata was not returned",
       );
     try {
-      return parseCapabilityMetadata(JSON.parse(turn.calls[0].argumentsJson));
-    } catch {
-      throw new SafeError(
-        "PROVIDER_PROTOCOL",
-        "Capability metadata was invalid",
-      );
+      return buildCapabilityMetadata(JSON.parse(turn.calls[0].argumentsJson));
+    } catch (cause) {
+      throw capabilityMetadataError(cause);
     }
   }
   async complete(

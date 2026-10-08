@@ -7,7 +7,59 @@ import type { InternalMessage } from "../../src/runtime/history.js";
 import type { DiscoveryContext } from "../../src/runtime/discovery-context.js";
 import type { ToolResponse } from "../../src/contracts/tools.js";
 import { OpenRouterClient } from "../../src/llm/openrouter-client.js";
+import { SafeError } from "../../src/contracts/errors.js";
 const input = { goal: "Find member", targetUrl: "https://example.org/app" };
+it("preserves and audits metadata provider failures before opening a browser", async () => {
+  const s = setup([]);
+  const audits: any[] = [];
+  const result = await runTask(
+    input,
+    {
+      ...s.deps,
+      model: {
+        ...s.deps.model,
+        async generateCapability() {
+          throw new SafeError(
+            "PROVIDER_HTTP",
+            "Provider request failed (HTTP 429)",
+          );
+        },
+      },
+    },
+    {
+      discovery: {
+        deployment: {
+          app_deployment_id: "test",
+          base_url: input.targetUrl,
+          product_id: "desk",
+          ui_variant: "standard",
+          vendor_release: null,
+          config_version: 1,
+        },
+        capability_catalog: [],
+        inputs: {},
+        records: [],
+        references: [],
+      },
+      onAudit: (record) => {
+        audits.push(record);
+      },
+    },
+  );
+  expect(result.error).toEqual({
+    code: "PROVIDER_HTTP",
+    message: "Provider request failed (HTTP 429)",
+  });
+  expect(audits).toContainEqual(
+    expect.objectContaining({
+      type: "provider_failed",
+      modelTurn: 0,
+      stage: "capability_metadata",
+      error: result.error,
+    }),
+  );
+  expect(s.adapters).toHaveLength(0);
+});
 const call = (id: string, name: string, args: unknown): ToolCall => ({
   id,
   name,

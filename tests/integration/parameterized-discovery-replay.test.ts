@@ -5,6 +5,7 @@ import { createBrowserFactory } from "../../src/adapters/factory.js";
 import { startFixture } from "../helpers/fixture-server.js";
 import { lastObservation } from "../../src/demo/scripted-model.js";
 import type { DiscoveryContext } from "../../src/runtime/discovery-context.js";
+import { OpenRouterClient } from "../../src/llm/openrouter-client.js";
 
 const html = `<!doctype html><title>Customers</title>
 <label>Customer search <input id="search"></label>
@@ -39,17 +40,45 @@ it("discovers input binding and row selection, then replays against a different 
         model: {
           model: "scripted",
           async generateCapability() {
-            return {
-              name: "Find customer status",
-              description: "Find a customer and report status",
-              input_schema: {
-                type: "object" as const,
-                properties: { customer: { type: "string" as const } },
-                required: ["customer"],
-                additionalProperties: false as const,
-              },
-              example_inputs: { customer: "Freya" },
-            };
+            const client = new OpenRouterClient(
+              { apiKey: "fake", model: "mock" },
+              async () =>
+                new Response(
+                  JSON.stringify({
+                    choices: [
+                      {
+                        message: {
+                          tool_calls: [
+                            {
+                              id: "metadata",
+                              type: "function",
+                              function: {
+                                name: "define_capability",
+                                arguments: JSON.stringify({
+                                  name: "Find customer status",
+                                  description:
+                                    "Find a customer and report status",
+                                  inputs: [
+                                    {
+                                      name: "customer",
+                                      description: "Customer name",
+                                      example: "Freya",
+                                    },
+                                  ],
+                                }),
+                              },
+                            },
+                          ],
+                        },
+                      },
+                    ],
+                  }),
+                ),
+            );
+            return client.generateCapability(
+              "Find Freya and report status",
+              discovery.inputs,
+            );
           },
           async complete(messages) {
             const o = lastObservation(messages);

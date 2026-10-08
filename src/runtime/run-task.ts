@@ -20,7 +20,10 @@ import { toolValidationMessage } from "./validation-feedback.js";
 import { buildInitialMessages, DISCOVERY_PROMPT } from "./prompts.js";
 import type { AuditSink } from "./audit.js";
 import { dispatchTool, type DispatchContext } from "./dispatch.js";
-import { parseCapabilityMetadata } from "./capability-metadata.js";
+import {
+  parseCapabilityMetadata,
+  capabilityMetadataError,
+} from "./capability-metadata.js";
 import { validateValues } from "../contracts/artifact.js";
 import {
   discoveryExpressionJson,
@@ -350,6 +353,7 @@ export async function runTask(
     });
     options.signal?.throwIfAborted();
     if (options.discovery) {
+      const metadataStarted = performance.now();
       try {
         if (!options.discovery!.metadata) {
           if (!deps.model.generateCapability)
@@ -369,15 +373,18 @@ export async function runTask(
             ...options.discovery!.inputs,
           },
         );
-      } catch {
-        return await stop(
-          result("provider_error", "Capability metadata generation failed", {
-            error: {
-              code: "CAPABILITY_METADATA_INVALID",
-              message: "Capability metadata generation failed",
-            },
-          }),
-        );
+      } catch (cause) {
+        options.signal?.throwIfAborted();
+        const failure = capabilityMetadataError(cause);
+        const error = { code: failure.code, message: failure.message };
+        await audit({
+          type: "provider_failed",
+          modelTurn: 0,
+          stage: "capability_metadata",
+          error,
+          elapsedMs: Math.round(performance.now() - metadataStarted),
+        });
+        return await stop(result("provider_error", error.message, { error }));
       }
     }
     const adapter = await deps.adapterFactory.createForTask(input);

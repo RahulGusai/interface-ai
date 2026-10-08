@@ -21,13 +21,29 @@ it("requests typed capability metadata before discovery with a forced metadata t
             arguments: JSON.stringify({
               name: "Find customer status",
               description: "Find a customer and report status",
-              input_schema: {
-                type: "object",
-                properties: { customer: { type: "string" } },
-                required: ["customer"],
-                additionalProperties: false,
-              },
-              example_inputs: { customer: "Freya" },
+              inputs: [
+                {
+                  name: "customer",
+                  description: "Customer name",
+                  example: "Freya",
+                },
+                {
+                  name: "account_suffix",
+                  description: "Last four digits",
+                  example: "0106",
+                },
+                {
+                  name: "period",
+                  description: "Transaction month",
+                  example: "2026-01",
+                },
+                { name: "limit", description: "Number of results", example: 1 },
+                {
+                  name: "debits_only",
+                  description: "Filter debits",
+                  example: true,
+                },
+              ],
             }),
           },
         },
@@ -38,7 +54,28 @@ it("requests typed capability metadata before discovery with a forced metadata t
     "Find Freya and report status",
     {},
   );
-  expect(metadata.example_inputs).toEqual({ customer: "Freya" });
+  expect(metadata.example_inputs).toEqual({
+    customer: "Freya",
+    account_suffix: "0106",
+    period: "2026-01",
+    limit: 1,
+    debits_only: true,
+  });
+  expect(metadata.input_schema).toEqual({
+    type: "object",
+    properties: {
+      customer: { type: "string", description: "Customer name" },
+      account_suffix: { type: "string", description: "Last four digits" },
+      period: { type: "string", description: "Transaction month" },
+      limit: { type: "number", description: "Number of results" },
+      debits_only: { type: "boolean", description: "Filter debits" },
+    },
+    required: ["customer", "account_suffix", "period", "limit", "debits_only"],
+    additionalProperties: false,
+  });
+  expect(request.tools[0].function.parameters.properties).not.toHaveProperty(
+    "input_schema",
+  );
   expect(request.tools.map((tool: any) => tool.function.name)).toEqual([
     "define_capability",
   ]);
@@ -47,6 +84,57 @@ it("requests typed capability metadata before discovery with a forced metadata t
     function: { name: "define_capability" },
   });
 });
+it.each([
+  ["{PRIVATE", "response was not valid JSON"],
+  [
+    JSON.stringify({
+      name: "Find account",
+      description: "Find an account",
+      inputs: [
+        {
+          name: "account",
+          description: "Account",
+          example: { secret: "PRIVATE" },
+        },
+      ],
+    }),
+    "inputs.0.example (invalid_union)",
+  ],
+  [
+    JSON.stringify({
+      name: "Find account",
+      description: "Find an account",
+      inputs: [
+        { name: "account", description: "Account", example: "PRIVATE" },
+        { name: "account", description: "Account", example: "PRIVATE" },
+      ],
+    }),
+    "duplicate input names",
+  ],
+])(
+  "reports safe metadata diagnostics for malformed definitions",
+  async (argumentsJson, detail) => {
+    const fetcher = vi.fn(async () =>
+      turn({
+        tool_calls: [
+          {
+            id: "metadata",
+            type: "function",
+            function: { name: "define_capability", arguments: argumentsJson },
+          },
+        ],
+      }),
+    );
+    const client = new OpenRouterClient(config, fetcher);
+    const failure = await client
+      .generateCapability("Find account", {})
+      .catch((error) => error);
+    expect(failure.code).toBe("CAPABILITY_METADATA_INVALID");
+    expect(failure.message).toContain(detail);
+    expect(failure.message).not.toContain("PRIVATE");
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  },
+);
 it("projects PNG bytes, all tools and preserved IDs on every request", async () => {
   const fetcher = vi.fn(
     async (_url: string | URL | Request, _options?: RequestInit) =>
