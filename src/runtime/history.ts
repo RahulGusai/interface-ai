@@ -165,6 +165,11 @@ export function projectMessages(messages: InternalMessage[]): unknown[] {
       output.push({
         role: m.role,
         content: m.content,
+        ...(m.reasoning_details
+          ? { reasoning_details: m.reasoning_details }
+          : m.reasoning !== undefined
+            ? { reasoning: m.reasoning }
+            : {}),
         ...(m.tool_calls
           ? {
               tool_calls: m.tool_calls.map((c) => ({

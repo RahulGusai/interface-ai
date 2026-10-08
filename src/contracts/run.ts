@@ -20,6 +20,8 @@ export const assistantMessageSchema = z.strictObject({
   role: z.literal("assistant"),
   content: z.string().nullable(),
   tool_calls: z.array(toolCallSchema).min(1).optional(),
+  reasoning: z.string().optional(),
+  reasoning_details: z.array(z.record(z.string(), z.unknown())).optional(),
 });
 export type AssistantMessage = z.infer<typeof assistantMessageSchema>;
 export const agentTurnSchema = z

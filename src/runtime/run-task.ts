@@ -637,7 +637,15 @@ export async function runTask(
         return await stop(result("agent_stopped_unverified", turn.text));
       }
       remainingProposals = [...turn.calls];
-      await audit({ type: "model_proposed", modelTurn, calls: turn.calls });
+      await audit({
+        type: "model_proposed",
+        modelTurn,
+        calls: turn.calls,
+        reasoning_context_preserved: !!(
+          turn.assistantMessage.reasoning_details?.length ||
+          turn.assistantMessage.reasoning
+        ),
+      });
       if (turn.calls.length > budget - used)
         return await stop(
           result(

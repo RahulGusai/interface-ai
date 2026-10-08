@@ -122,6 +122,22 @@ export function resolveDiscoveryArguments(
         "ROW_MATCH_INVALID",
         `row_match must map declared input names to binding objects. Valid keys: ${Object.keys(declared).join(", ")}. Do not put operator/value at the top level.`,
       );
+    for (const [key, criterion] of Object.entries(
+      criteria as Record<string, any>,
+    )) {
+      const ref = criterion?.operator ? criterion.value : criterion;
+      if (
+        !ref ||
+        typeof ref !== "object" ||
+        ref.kind !== "input" ||
+        ref.path !== key ||
+        Object.keys(ref).some((k) => !["kind", "path"].includes(k))
+      )
+        throw new SafeError(
+          "UNBOUND_INPUT_ARGUMENT",
+          `UNBOUND_INPUT_ARGUMENT: row_match.${key} must use {"kind":"input","path":"${key}"}, optionally inside {"operator":"contains" or "ends_with","value":...}. Observed literals are not allowed, even with different spelling. If this input does not match the row, omit that criterion only when other bound criteria uniquely identify it.`,
+        );
+    }
   };
   if (raw?.row_match) checkRowShape(raw.row_match);
   if (tool === "extract_data" && Array.isArray(raw?.fields))

@@ -583,3 +583,17 @@ it("binds decorated names and account numbers inside compound cells without losi
   expect(replay("9999").diagnosis.reason).toBe("TARGET_NOT_FOUND");
   expect(replay("0").diagnosis.reason).toBe("TARGET_AMBIGUOUS");
 });
+it("rejects a renamed literal even when it no longer contains the example input", () => {
+  expect(() =>
+    resolveDiscoveryArguments(
+      "click",
+      {
+        row_match: {
+          branch: { operator: "contains", value: "012 Harbor Street" },
+        },
+      },
+      { branch: "Harbour Street" },
+      { branch: { type: "string" } },
+    ),
+  ).toThrow("UNBOUND_INPUT_ARGUMENT");
+});

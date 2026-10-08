@@ -24,7 +24,12 @@ export type AuditRecord =
       goal: string;
       maxToolCalls: number;
     }
-  | { type: "model_proposed"; modelTurn: number; calls: ToolCall[] }
+  | {
+      type: "model_proposed";
+      modelTurn: number;
+      calls: ToolCall[];
+      reasoning_context_preserved?: boolean;
+    }
   | { type: "model_final_text"; modelTurn: number; text: string }
   | {
       type: "provider_retry";

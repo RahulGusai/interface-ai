@@ -16,6 +16,11 @@ const responseSchema = z.object({
         finish_reason: z.string().nullable().optional(),
         message: z.object({
           content: z.string().nullable().optional(),
+          reasoning: z.string().nullable().optional(),
+          reasoning_details: z
+            .array(z.record(z.string(), z.unknown()))
+            .nullable()
+            .optional(),
           tool_calls: z
             .array(
               z.object({
@@ -207,6 +212,12 @@ export class OpenRouterClient implements ModelClient {
     try {
       const choice = responseSchema.parse(body).choices[0]!;
       const m = choice.message;
+      // Opaque provider continuation context stays internal; never interpret or display it.
+      const reasoning = m.reasoning_details?.length
+        ? { reasoning_details: m.reasoning_details }
+        : typeof m.reasoning === "string"
+          ? { reasoning: m.reasoning }
+          : {};
       if (choice.finish_reason === "length")
         throw new SafeError(
           "PROVIDER_OUTPUT_LIMIT",
@@ -229,6 +240,7 @@ export class OpenRouterClient implements ModelClient {
           assistantMessage: {
             role: "assistant",
             content: m.content ?? null,
+            ...reasoning,
             tool_calls: calls,
           },
         });
@@ -241,7 +253,11 @@ export class OpenRouterClient implements ModelClient {
       return agentTurnSchema.parse({
         kind: "final_text",
         text: m.content,
-        assistantMessage: { role: "assistant", content: m.content },
+        assistantMessage: {
+          role: "assistant",
+          content: m.content,
+          ...reasoning,
+        },
       });
     } catch (error) {
       if (error instanceof SafeError) throw error;

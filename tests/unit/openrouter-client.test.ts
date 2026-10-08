@@ -389,3 +389,64 @@ it("fails missing image bytes before transport and refuses unmatched history", a
     h.appendToolResult("missing", { status: "error", code: "X", message: "x" }),
   ).toThrow();
 });
+it("preserves opaque provider reasoning across tool continuations", async () => {
+  const details = [
+    {
+      type: "reasoning.encrypted",
+      data: "opaque-test",
+      index: 0,
+      id: "r1",
+      signature: "signed",
+    },
+  ];
+  const requests: any[] = [];
+  const client = new OpenRouterClient(config, async (_url, options) => {
+    requests.push(JSON.parse(String(options?.body)));
+    return turn({
+      content: null,
+      reasoning: "test-reasoning",
+      reasoning_details: details,
+      tool_calls: [
+        {
+          id: "a",
+          type: "function",
+          function: { name: "observe_ui", arguments: '{"mode":"both"}' },
+        },
+      ],
+    });
+  });
+  const first = await client.complete([], toolDefinitions);
+  const history = new ConversationHistory([]);
+  history.appendAssistantToolCalls(first.assistantMessage);
+  history.appendToolResult("a", {
+    status: "error",
+    code: "TEST",
+    message: "Test",
+  });
+  await client.complete(history.messages, toolDefinitions);
+  expect(requests[1].messages[0].reasoning_details).toEqual(details);
+  expect(first.assistantMessage).toHaveProperty("reasoning_details", details);
+});
+it("forwards raw reasoning when structured continuation blocks are absent", async () => {
+  const client = new OpenRouterClient(config, async () =>
+    turn({
+      content: null,
+      reasoning: "opaque test state",
+      tool_calls: [
+        {
+          id: "a",
+          type: "function",
+          function: { name: "observe_ui", arguments: "{}" },
+        },
+      ],
+    }),
+  );
+  const response = await client.complete([], toolDefinitions);
+  const history = new ConversationHistory([]);
+  history.appendAssistantToolCalls(response.assistantMessage);
+  history.appendToolResult("a", { status: "error", code: "TEST", message: "Test" });
+  expect(history.toOpenRouterMessages()[0]).toHaveProperty(
+    "reasoning",
+    "opaque test state",
+  );
+});
