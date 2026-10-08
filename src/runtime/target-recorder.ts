@@ -212,7 +212,7 @@ export function recordDurableTarget(
     if (inputValues.some((v) => stableName.toLowerCase().includes(v)))
       throw new SafeError(
         "TARGET_DEPENDS_ON_INPUT",
-        "TARGET_DEPENDS_ON_INPUT: this target is identified by an example input value. Select a source control with a stable label. If no reusable source is available, finish_task with unable_to_complete; do not repeat this target.",
+        "TARGET_DEPENDS_ON_INPUT: this target is identified by an example input value. Select a source with a stable label or a table cell with input-bound row_match. If the needed fact was on a previous page, return to that page using its navigation controls and extract it there. A page summary is not a substitute for separate account-number and balance cells. Do not repeat this target.",
       );
     return {
       target: {
