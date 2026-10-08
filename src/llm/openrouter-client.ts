@@ -109,7 +109,7 @@ export class OpenRouterClient implements ModelClient {
         {
           role: "system",
           content:
-            "Define the reusable operation before browser discovery. Extract variable example inputs from the task and include all suppliedInputs. Return each input once with a name, description, and primitive example value. Use strings for identifiers, account numbers or suffixes (preserving leading zeros), dates, and periods; numbers for quantities; booleans for switches. Use concise name and description without example-specific identities. Call define_capability once. Do not invent values missing from the task. The runtime constructs the typed input schema from your examples.",
+            "Define the reusable operation before browser discovery. Extract variable example inputs from the task and include all suppliedInputs. Return each input once with a name, description, and primitive example value. Use strings for identifiers, account numbers or suffixes (preserving leading zeros) and dates; numbers for quantities; booleans for switches. Convert an explicit month/year or date range into two inputs start_date and end_date with inclusive YYYY-MM-DD boundary values, so UI date filters can bind directly; do not emit one display-period input. Use concise name and description without example-specific identities. Call define_capability once. Do not invent facts missing from the task. The runtime constructs the typed input schema from your examples.",
         },
         { role: "user", content: JSON.stringify({ goal, suppliedInputs }) },
       ],

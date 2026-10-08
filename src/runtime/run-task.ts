@@ -31,6 +31,7 @@ import {
   resolveDiscoveryArguments,
   assertBoundArguments,
   rowCriterionJson,
+  explicitDiscoveryExpression,
 } from "./discovery-bindings.js";
 import {
   toolDefinitions,
@@ -84,7 +85,12 @@ export async function runTask(
             ...discoveryExpressionJson,
             description: `Variable task values MUST use input references, never their example literals. Available references: ${JSON.stringify(refs)}. Templates may combine references with fixed text. Plain values are only for fixed constants.`,
           };
-          if (name === "type_text") properties.text = expression;
+          if (name === "type_text")
+            properties.text = {
+              ...explicitDiscoveryExpression.toJSONSchema(),
+              type: "object",
+              description: `${expression.description} Always send a JSON object, never a quoted/escaped object. For fixed text use {"kind":"literal","value":"fixed text"}.`,
+            };
           if (["click", "type_text"].includes(name))
             properties.row_match = {
               type: "object",

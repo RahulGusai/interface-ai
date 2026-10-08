@@ -4,7 +4,10 @@ import { buildArtifact } from "../../src/runtime/artifact-builder.js";
 import { recordDurableTarget } from "../../src/runtime/target-recorder.js";
 import type { DiscoveryContext } from "../../src/runtime/discovery-context.js";
 import type { Capture } from "../../src/contracts/observation.js";
-import { resolveDiscoveryArguments } from "../../src/runtime/discovery-bindings.js";
+import {
+  resolveDiscoveryArguments,
+  assertBoundArguments,
+} from "../../src/runtime/discovery-bindings.js";
 
 const capture = (names: string[]): Capture => ({
   observation: {
@@ -270,6 +273,37 @@ it("preserves input and template arguments while leaving plain mode literal", ()
 });
 
 it("turns a numeric input binding into text for type_text", () => {
+  expect(() =>
+    assertBoundArguments(
+      "type_text",
+      { text: { kind: "literal", value: "" } },
+      { customer: "Era" },
+    ),
+  ).not.toThrow();
+  expect(() =>
+    resolveDiscoveryArguments(
+      "type_text",
+      { text: '{"path":"customer","kind":"input"}' },
+      { customer: "Freya" },
+      { customer: { type: "string" } },
+    ),
+  ).toThrow("JSON object");
+  expect(() =>
+    resolveDiscoveryArguments(
+      "type_text",
+      { text: '{kind:\\"input\\",path:\\"customer\\"}' },
+      { customer: "Freya" },
+      { customer: { type: "string" } },
+    ),
+  ).toThrow("JSON object");
+  expect(
+    resolveDiscoveryArguments(
+      "type_text",
+      { text: { kind: "literal", value: "" } },
+      {},
+      {},
+    ).resolved.text,
+  ).toBe("");
   expect(
     resolveDiscoveryArguments(
       "type_text",

@@ -10,6 +10,8 @@ const literal = (value: any) => ({
   value: structuredClone(value),
 });
 const argumentBinding = (value: any): any => {
+  if (value && typeof value === "object" && value.kind === "literal")
+    return literal(value.value);
   if (value && typeof value === "object" && value.kind === "input")
     return { kind: "input", path: value.path };
   if (value && typeof value === "object" && value.kind === "template") {

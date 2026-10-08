@@ -196,6 +196,10 @@ it("reports the rejected extraction target and allows a corrected labeled source
       .parameters.properties.text.description,
   ).toContain("account_suffix");
   expect(
+    s.definitions[0].find((d: any) => d.function.name === "type_text").function
+      .parameters.properties.text.type,
+  ).toBe("object");
+  expect(
     s.context.artifact?.definition.output_mapping.account_number,
   ).toMatchObject({ kind: "step_output" });
 });

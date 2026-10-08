@@ -15,6 +15,7 @@ export function assertBoundArguments(
     .filter(Boolean);
   const includesVariableLiteral = (value: any): boolean => {
     if (value?.kind === "input") return false;
+    if (value?.kind === "literal") return includesVariableLiteral(value.value);
     if (value?.kind === "template")
       return value.parts.some(includesVariableLiteral);
     if (typeof value === "string")
@@ -64,12 +65,19 @@ const template = z.strictObject({
     .array(z.union([z.string(), z.number().finite(), z.boolean(), input]))
     .min(1),
 });
+export const explicitDiscoveryExpression = z.discriminatedUnion("kind", [
+  input,
+  template,
+  z.strictObject({
+    kind: z.literal("literal"),
+    value: z.union([z.string(), z.number().finite(), z.boolean()]),
+  }),
+]);
 export const discoveryExpression = z.union([
   z.string(),
   z.number().finite(),
   z.boolean(),
-  input,
-  template,
+  explicitDiscoveryExpression,
 ]);
 const resolvedRowMatch = z.record(
   z.string(),
@@ -105,7 +113,7 @@ export function resolveDiscoveryArguments(
   const resolve = (value: any): any => {
     if (Array.isArray(value)) return value.map(resolve);
     if (!value || typeof value !== "object") return value;
-    if (value.kind === "input" || value.kind === "template") {
+    if (["input", "template", "literal"].includes(value.kind)) {
       const expression = discoveryExpression.parse(value);
       const check = (part: any) => {
         if (part?.kind === "input" && !Object.hasOwn(declared, part.path))
@@ -120,6 +128,16 @@ export function resolveDiscoveryArguments(
     );
   };
   const resolved = resolve(raw);
+  if (
+    tool === "type_text" &&
+    typeof raw.text === "string" &&
+    raw.text.trimStart().startsWith("{") &&
+    /[,{]\s*["']?kind["']?\s*:/.test(raw.text.replace(/\\/g, ""))
+  )
+    throw new SafeError(
+      "INVALID_BINDING_SHAPE",
+      'text must be a JSON object, not a string containing JSON. Example: "text":{"kind":"input","path":"input_name"}. Do not quote or escape the object.',
+    );
   if (
     tool === "type_text" &&
     ["number", "boolean"].includes(typeof resolved.text)
