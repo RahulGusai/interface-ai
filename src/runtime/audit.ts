@@ -27,6 +27,14 @@ export type AuditRecord =
   | { type: "model_proposed"; modelTurn: number; calls: ToolCall[] }
   | { type: "model_final_text"; modelTurn: number; text: string }
   | {
+      type: "provider_retry";
+      modelTurn: number;
+      attempt: number;
+      max_attempts: number;
+      stage?: "capability_metadata";
+      error: { code: string; message: string };
+    }
+  | {
       type: "provider_failed";
       modelTurn: number;
       stage?: "capability_metadata";

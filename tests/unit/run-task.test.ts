@@ -439,3 +439,45 @@ it("reports the reason for an accepted human request", async () => {
     reason: "Two matching members need review",
   });
 });
+it("retries an empty provider turn without replaying browser actions or altering history", async () => {
+  const fail = () => {
+    throw new SafeError("PROVIDER_EMPTY_RESPONSE", "Empty provider response");
+  };
+  const s = setup([
+    fail,
+    batch([
+      call("done", "finish_task", {
+        outcome: "goal_achieved",
+        summary: "Done",
+        outputs: {},
+      }),
+    ]),
+  ]);
+  const audits: any[] = [];
+  const result = await runTask(
+    input,
+    { ...s.deps, contract: {} },
+    {
+      onAudit: (r) => {
+        audits.push(r);
+      },
+    },
+  );
+  expect(result.status).toBe("goal_achieved");
+  expect(s.requests).toHaveLength(2);
+  expect(s.requests[0]).toEqual(s.requests[1]);
+  expect(audits.filter((r) => r.type === "provider_retry")).toHaveLength(1);
+  expect(
+    audits.filter((r) => r.type === "tool_started" && r.source === "bootstrap"),
+  ).toHaveLength(1);
+});
+it("bounds empty-response retries and retains the terminal diagnostic", async () => {
+  const fail = () => {
+    throw new SafeError("PROVIDER_EMPTY_RESPONSE", "Empty provider response");
+  };
+  const s = setup([fail, fail, fail, fail]);
+  const result = await runTask(input, s.deps);
+  expect(result.status).toBe("provider_error");
+  expect(result.error?.code).toBe("PROVIDER_EMPTY_RESPONSE");
+  expect(s.requests).toHaveLength(3);
+});

@@ -446,6 +446,34 @@ export async function runTask(
       );
     }
   };
+  const withProviderRecovery = async <T>(
+    operation: () => Promise<T>,
+    stage?: "capability_metadata",
+  ): Promise<T> => {
+    for (let attempt = 1; ; attempt++) {
+      options.signal?.throwIfAborted();
+      try {
+        return await operation();
+      } catch (cause) {
+        options.signal?.throwIfAborted();
+        // An empty response proposed no actions. Retrying this request cannot repeat a UI write.
+        if (
+          !(cause instanceof SafeError) ||
+          cause.code !== "PROVIDER_EMPTY_RESPONSE" ||
+          attempt >= 3
+        )
+          throw cause;
+        await audit({
+          type: "provider_retry",
+          modelTurn,
+          attempt: attempt + 1,
+          max_attempts: 3,
+          ...(stage ? { stage } : {}),
+          error: { code: cause.code, message: cause.message },
+        });
+      }
+    }
+  };
   emit({ type: "started", targetUrl: input.targetUrl });
   try {
     await audit({
@@ -462,10 +490,14 @@ export async function runTask(
           if (!deps.model.generateCapability)
             throw Error("METADATA_GENERATOR_UNAVAILABLE");
           options.discovery!.metadata = parseCapabilityMetadata(
-            await deps.model.generateCapability(
-              input.goal,
-              options.discovery!.inputs,
-              { signal: options.signal },
+            await withProviderRecovery(
+              () =>
+                deps.model.generateCapability!(
+                  input.goal,
+                  options.discovery!.inputs,
+                  { signal: options.signal },
+                ),
+              "capability_metadata",
             ),
           );
         }
@@ -567,13 +599,15 @@ export async function runTask(
       const providerStarted = performance.now();
       try {
         turn = agentTurnSchema.parse(
-          await deps.model.complete(
-            context.history.messages.map((m) => m),
-            definitions,
-            {
-              signal: options.signal,
-              ...(options.discovery ? { toolChoice: "required" } : {}),
-            },
+          await withProviderRecovery(() =>
+            deps.model.complete(
+              context!.history.messages.map((m) => m),
+              definitions,
+              {
+                signal: options.signal,
+                ...(options.discovery ? { toolChoice: "required" } : {}),
+              },
+            ),
           ),
         );
       } catch (cause) {
