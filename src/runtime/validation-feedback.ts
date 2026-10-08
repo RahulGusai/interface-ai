@@ -1,7 +1,9 @@
 import { ZodError } from "zod";
+import { SafeError } from "../contracts/errors.js";
 
 /** Describe contract failures without echoing submitted argument values. */
 export function toolValidationMessage(error: unknown): string {
+  if (error instanceof SafeError) return error.message;
   if (error instanceof ZodError)
     return `Correct these argument fields: ${error.issues
       .map(

@@ -4,6 +4,7 @@ import { createHash } from "node:crypto";
 import type { Capture, Target } from "../contracts/observation.js";
 import type { DurableTarget } from "../contracts/artifact.js";
 import { rowMatchesValues } from "./row-selection.js";
+import { SafeError } from "../contracts/errors.js";
 export const recordingHint = z.strictObject({
   visual_reference: z.strictObject({
     rect: z.strictObject({
@@ -116,7 +117,10 @@ export function recordDurableTarget(
       visibleText !== control.name;
     const stableName = useText ? visibleText : control.name;
     if (inputValues.some((v) => stableName.toLowerCase().includes(v)))
-      throw Error("TARGET_DEPENDS_ON_INPUT");
+      throw new SafeError(
+        "TARGET_DEPENDS_ON_INPUT",
+        "TARGET_DEPENDS_ON_INPUT: this target is identified by an example input value. Select a source control with a stable label. If no reusable source is available, finish_task with unable_to_complete; do not repeat this target.",
+      );
     return {
       target: {
         kind: "semantic",

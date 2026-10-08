@@ -4,6 +4,7 @@ import {
 } from "../contracts/artifact.js";
 import type { DiscoveryProposal } from "../contracts/discovery-proposal.js";
 import type { DiscoveryContext } from "./discovery-context.js";
+import { assertBoundArguments } from "./discovery-bindings.js";
 const literal = (value: any) => ({
   kind: "literal",
   value: structuredClone(value),
@@ -36,43 +37,8 @@ export function buildArtifact(
   goal: string,
   outputs: Record<string, unknown>,
 ): DiscoveryProposal {
-  const variableValues = Object.values(c.inputs)
-    .filter((value) => ["string", "number", "boolean"].includes(typeof value))
-    .map((value) => String(value).toLowerCase())
-    .filter(Boolean);
-  const includesVariableLiteral = (value: any): boolean => {
-    if (value?.kind === "input") return false;
-    if (value?.kind === "template")
-      return value.parts.some(includesVariableLiteral);
-    if (typeof value === "string")
-      return variableValues.some((input) =>
-        value.toLowerCase().includes(input),
-      );
-    if (Array.isArray(value)) return value.some(includesVariableLiteral);
-    if (value && typeof value === "object")
-      return Object.values(value).some(includesVariableLiteral);
-    return false;
-  };
   const steps = c.records.map((record, i) => {
-    if (
-      c.metadata &&
-      variableValues.length &&
-      ((record.tool === "type_text" &&
-        includesVariableLiteral(record.input.text)) ||
-        (record.input.row_match &&
-          includesVariableLiteral(record.input.row_match)) ||
-        (record.tool === "select_option" &&
-          includesVariableLiteral(record.input.option?.label)) ||
-        (["check_ui", "wait_for"].includes(record.tool) &&
-          includesVariableLiteral(record.input.condition?.expected)) ||
-        (record.tool === "navigate" &&
-          variableValues.some(
-            (value) =>
-              value.length > 2 &&
-              String(record.input.url).toLowerCase().includes(value),
-          )))
-    )
-      throw Error("UNBOUND_INPUT_ARGUMENT");
+    if (c.metadata) assertBoundArguments(record.tool, record.input, c.inputs);
     const args = Object.fromEntries(
       Object.entries(record.input)
         .filter(

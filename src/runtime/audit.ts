@@ -10,8 +10,14 @@ import { join } from "node:path";
 import type { ImageContent } from "../contracts/observation.js";
 import type { ToolCall, RunResult } from "../contracts/run.js";
 import type { ToolResponse } from "../contracts/tools.js";
+import type { CapabilityMetadata } from "./capability-metadata.js";
 
 export type AuditRecord =
+  | {
+      type: "capability_metadata_generated";
+      metadata: CapabilityMetadata;
+      inputs: Record<string, unknown>;
+    }
   | {
       type: "run_started";
       targetUrl: string;

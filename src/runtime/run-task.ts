@@ -1,4 +1,5 @@
 import type { DiscoveryContext } from "./discovery-context.js";
+import { isDeepStrictEqual } from "node:util";
 import { buildArtifact } from "./artifact-builder.js";
 import { recordDurableTarget, recordingHint } from "./target-recorder.js";
 import type { Capture } from "../contracts/observation.js";
@@ -28,6 +29,7 @@ import { validateValues } from "../contracts/artifact.js";
 import {
   discoveryExpressionJson,
   resolveDiscoveryArguments,
+  assertBoundArguments,
 } from "./discovery-bindings.js";
 import {
   toolDefinitions,
@@ -65,6 +67,7 @@ export async function runTask(
   let remainingProposals: import("../contracts/run.js").ToolCall[] = [];
   let auditFailed = false;
   let currentCapture: Capture | undefined;
+  let rejectedExtraction: unknown;
   const definitions = options.discovery
     ? toolDefinitions.map((d) => {
         const name = d.function.name;
@@ -152,6 +155,8 @@ export async function runTask(
           options.discovery.metadata?.input_schema.properties ?? {},
         ));
         const action = parseToolAction(call.name, resolved);
+        if (options.discovery.metadata)
+          assertBoundArguments(call.name, parsed, options.discovery.inputs);
         if (action.name === "finish_task") parsed = action.input;
         if (
           "observation_id" in action.input &&
@@ -175,7 +180,7 @@ export async function runTask(
         preflight = {
           result: {
             status: "error",
-            code: "INVALID_TOOL_CALL",
+            code: error instanceof SafeError ? error.code : "INVALID_TOOL_CALL",
             message: toolValidationMessage(error),
           },
         };
@@ -208,33 +213,39 @@ export async function runTask(
           preflight = {
             result: {
               status: "error",
-              code: "INVALID_TOOL_CALL",
+              code:
+                error instanceof SafeError ? error.code : "INVALID_TOOL_CALL",
               message: toolValidationMessage(error),
             },
           };
         }
       }
       if (!preflight && call.name === "extract_data") {
+        let fieldIndex = 0;
         try {
           if (!currentCapture) throw Error("REFERENCE_CAPTURE_REQUIRED");
           parsed._durable_fields = Object.fromEntries(
-            parsed.fields.map((f: any) => [
-              f.name,
-              recordDurableTarget(
-                f.target,
-                currentCapture!,
-                undefined,
-                undefined,
-                options.discovery!.inputs,
-              ).target,
-            ]),
+            parsed.fields.map((f: any, index: number) => {
+              fieldIndex = index;
+              return [
+                f.name,
+                recordDurableTarget(
+                  f.target,
+                  currentCapture!,
+                  undefined,
+                  undefined,
+                  options.discovery!.inputs,
+                ).target,
+              ];
+            }),
           );
         } catch (error) {
           preflight = {
             result: {
               status: "error",
-              code: "INVALID_TOOL_CALL",
-              message: toolValidationMessage(error),
+              code:
+                error instanceof SafeError ? error.code : "INVALID_TOOL_CALL",
+              message: `fields.${fieldIndex}.target: ${toolValidationMessage(error)}`,
             },
           };
         }
@@ -242,6 +253,26 @@ export async function runTask(
     }
     const normalized = { ...(resolved ?? parsed) };
     delete normalized._durable_fields;
+    // A repeated input-dependent target on the same observation cannot become
+    // reusable through retry. Give correction feedback once, then stop the loop.
+    if (
+      call.name === "extract_data" &&
+      preflight?.result.status === "error" &&
+      preflight.result.code === "TARGET_DEPENDS_ON_INPUT"
+    ) {
+      if (isDeepStrictEqual(rejectedExtraction, normalized)) {
+        preflight = {
+          result: {
+            status: "error",
+            code: "REPEATED_INVALID_EXTRACTION",
+            message: `Stopped an unchanged rejected extraction. ${preflight.result.message}`,
+          },
+        };
+      }
+      rejectedExtraction = structuredClone(normalized);
+    } else {
+      rejectedExtraction = undefined;
+    }
     const dispatchedCall = {
       ...call,
       argumentsJson: JSON.stringify(normalized),
@@ -386,6 +417,11 @@ export async function runTask(
         });
         return await stop(result("provider_error", error.message, { error }));
       }
+      await audit({
+        type: "capability_metadata_generated",
+        metadata: options.discovery.metadata!,
+        inputs: options.discovery.inputs,
+      });
     }
     const adapter = await deps.adapterFactory.createForTask(input);
     context = {
@@ -519,6 +555,18 @@ export async function runTask(
           callId: call.id,
           status: response.result.status,
         });
+        if (
+          response.result.status === "error" &&
+          response.result.code === "REPEATED_INVALID_EXTRACTION"
+        )
+          return await stop(
+            result("tool_error", response.result.message, {
+              error: {
+                code: response.result.code,
+                message: response.result.message,
+              },
+            }),
+          );
         if (context.halted || response.result.status === "needs_intervention")
           return await stop(
             result(
