@@ -128,9 +128,19 @@ export const captureContext = z.strictObject({
 });
 export const durableTarget = z.discriminatedUnion("kind", [
   z.strictObject({
+    kind: z.literal("row_action"),
+    row_role: z.literal("row"),
+    action_role: z.string().min(1),
+    action_text: z.string().min(1).optional(),
+    action_name: z.string().min(1).optional(),
+    scope: z.array(scope).nullable(),
+    required_matches: z.literal(1),
+  }),
+  z.strictObject({
     kind: z.literal("semantic"),
     role: z.string().min(1),
     name: binding,
+    match_by: z.enum(["name", "text"]).optional(),
     exact: z.literal(true),
     scope: z.array(scope).nullable(),
     required_matches: z.literal(1),

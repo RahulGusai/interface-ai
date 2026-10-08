@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 from conftest import run
 
+from interface_api.artifact_validation import validate_definition
 from interface_api.config import Settings
 from interface_api.lifecycle import Lifecycle, outcome
 from interface_api.worker import Worker
@@ -171,3 +172,34 @@ def test_runtime_build_failure_remains_a_finalization_failure(
     assert failed["result"]["outcome"]["code"] == "ARTIFACT_BUILD_FAILED"
     assert failed["result"]["outcome"]["failure_stage"] == "finalization"
     assert not repo.rows("artifacts")
+
+
+def test_parameterized_row_artifact_is_accepted_by_backend_contract():
+    definition = {
+        "surface": "browser",
+        "compatibility": {"product_id": "desk", "ui_variant": "standard", "vendor_release": None},
+        "input_schema": {"type": "object", "properties": {"customer": {"type": "string"}},
+                         "required": ["customer"], "additionalProperties": False},
+        "output_schema": {"type": "object", "properties": {"status": {"type": "string"}},
+                          "required": ["status"], "additionalProperties": False},
+        "entry": {"url": {"kind": "environment", "path": "base_url"}, "checks": []},
+        "steps": [
+            {"step_id": "step_1", "tool": "click", "arguments": {
+                "row_match": {"customer": {"kind": "input", "path": "customer"}}},
+             "target": {"kind": "row_action", "row_role": "row", "action_role": "link",
+                        "action_text": "Open", "scope": None, "required_matches": 1},
+             "pre_checks": [], "post_checks": [], "recoveries": []},
+            {"step_id": "step_2", "tool": "extract_data", "arguments": {
+                "fields": [{"name": "status", "property": "text", "output_type": "string",
+                            "target": {"kind": "semantic", "role": "text",
+                                       "name": {"kind": "literal", "value": "Status"},
+                                       "exact": True, "scope": None, "required_matches": 1}}]},
+             "pre_checks": [], "post_checks": [], "recoveries": []},
+        ],
+        "success_checks": [{"check_id": "completed", "kind": "tool_status_equals",
+                            "step_id": "step_2", "expected": "completed"}],
+        "business_outcomes": [],
+        "output_mapping": {"status": {"kind": "step_output", "step_id": "step_2",
+                                      "path": "fields.status.value"}},
+    }
+    assert validate_definition(definition) == definition

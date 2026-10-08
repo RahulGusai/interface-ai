@@ -57,6 +57,9 @@ export async function readSemantics(
       textarea: "textbox",
       select: "combobox",
       a: "link",
+      tr: "row",
+      td: "cell",
+      th: "columnheader",
       p: "text",
       h1: "heading",
       h2: "heading",
@@ -151,6 +154,7 @@ export async function collectControls(page: Page): Promise<{
   try {
     for (const frame of page.frames()) {
       const elements = (await frame.$$("body *")) as Element[];
+      const rowRefs = new Map<string, string>();
       for (const element of elements) handles.add(element);
       for (const element of elements) {
         const semantics = await readSemantics(element);
@@ -192,6 +196,28 @@ export async function collectControls(page: Page): Promise<{
               }
           } finally {
             await select.dispose();
+          }
+        }
+        if (control.role !== "option") {
+          const rowPath = await element.evaluate((e) => {
+            const row = e.closest('tr,[role="row"]');
+            if (!row) return null;
+            const indices: number[] = [];
+            for (
+              let node: HTMLElement | null = row as HTMLElement;
+              node && node !== e.ownerDocument.body;
+              node = node.parentElement
+            ) {
+              if (!node.parentElement) return null;
+              indices.push(
+                Array.prototype.indexOf.call(node.parentElement.children, node),
+              );
+            }
+            return indices.reverse().join(".");
+          });
+          if (rowPath !== null) {
+            if (control.role === "row") rowRefs.set(rowPath, ref);
+            else control.parent_ref = rowRefs.get(rowPath);
           }
         }
         const options = await element.evaluate((e) =>

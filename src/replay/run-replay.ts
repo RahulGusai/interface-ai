@@ -260,7 +260,24 @@ export async function runReplay(
         }
       } else {
         args = resolveBindings(s.arguments, inputs, results, c.environment);
-        if (s.target) args.target = await resolve(s.target);
+        if (
+          s.tool === "type_text" &&
+          ["number", "boolean"].includes(typeof args.text)
+        )
+          args.text = String(args.text);
+        if (s.target) {
+          const rowMatch = s.arguments.row_match;
+          const r = resolveTarget(s.target, capture, assets, c, rowMatch);
+          await audit(
+            "target_resolution_finished",
+            r.diagnosis,
+            capture.image,
+            s.step_id,
+          );
+          if (!r.target) throw Error(String(r.diagnosis.reason));
+          args.target = r.target;
+        }
+        delete args.row_match;
       }
       if (s.tool !== "navigate" && s.tool !== "observe_ui")
         args.observation_id = capture.observation.observation_id;

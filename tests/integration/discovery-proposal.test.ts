@@ -42,7 +42,7 @@ it("builds an artifact without a model proposal and keeps inline observation byt
               observation_id: o.observation_id,
               target: target("textbox", "Member email"),
               mode: "replace",
-              text: "demo@example.test",
+              text: { kind: "input", path: "email" },
             };
             break;
           case 1:
@@ -56,7 +56,8 @@ it("builds an artifact without a model proposal and keeps inline observation byt
             name = "click";
             input = {
               observation_id: o.observation_id,
-              target: target("link", "demo@example.test"),
+              target: target("link", "Open demo@example.test"),
+              row_match: { email: { kind: "input", path: "email" } },
             };
             break;
           case 3:
@@ -107,6 +108,17 @@ it("builds an artifact without a model proposal and keeps inline observation byt
       },
       capability_catalog: [],
       inputs: { email: "demo@example.test" },
+      metadata: {
+        name: "Look up member",
+        description: "Find a member status",
+        input_schema: {
+          type: "object",
+          properties: { email: { type: "string" } },
+          required: ["email"],
+          additionalProperties: false,
+        },
+        example_inputs: { email: "demo@example.test" },
+      },
       records: [],
       references: [],
     };

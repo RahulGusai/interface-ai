@@ -2,6 +2,7 @@ import type { StartCommand } from "../bridge/protocol.js";
 import type { DiscoveryProposal } from "../contracts/discovery-proposal.js";
 import type { Capture } from "../contracts/observation.js";
 import type { DurableTarget } from "../contracts/artifact.js";
+import type { CapabilityMetadata } from "./capability-metadata.js";
 export type RecordedAction = {
   call_id: string;
   tool: string;
@@ -13,6 +14,7 @@ export type DiscoveryContext = {
   deployment: StartCommand["deployment"];
   capability_catalog: any[];
   inputs: Record<string, unknown>;
+  metadata?: CapabilityMetadata;
   records: RecordedAction[];
   references: DiscoveryProposal["reference_assets"];
   recordReference?: (

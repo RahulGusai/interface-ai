@@ -377,6 +377,91 @@
                 "properties": {
                   "kind": {
                     "type": "string",
+                    "const": "row_action"
+                  },
+                  "row_role": {
+                    "type": "string",
+                    "const": "row"
+                  },
+                  "action_role": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "action_text": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "action_name": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "scope": {
+                    "anyOf": [
+                      {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "role": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "name": {
+                              "type": "string"
+                            },
+                            "exact": {
+                              "type": "boolean",
+                              "const": true
+                            },
+                            "frame": {
+                              "type": "object",
+                              "properties": {
+                                "name": {
+                                  "type": "string"
+                                },
+                                "url_path": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "name",
+                                "url_path"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": [
+                            "role",
+                            "name",
+                            "exact"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "required_matches": {
+                    "type": "number",
+                    "const": 1
+                  }
+                },
+                "required": [
+                  "kind",
+                  "row_role",
+                  "action_role",
+                  "scope",
+                  "required_matches"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
                     "const": "semantic"
                   },
                   "role": {
@@ -385,6 +470,13 @@
                   },
                   "name": {
                     "$ref": "#/$defs/__schema0"
+                  },
+                  "match_by": {
+                    "type": "string",
+                    "enum": [
+                      "name",
+                      "text"
+                    ]
                   },
                   "exact": {
                     "type": "boolean",
@@ -655,6 +747,91 @@
                               "properties": {
                                 "kind": {
                                   "type": "string",
+                                  "const": "row_action"
+                                },
+                                "row_role": {
+                                  "type": "string",
+                                  "const": "row"
+                                },
+                                "action_role": {
+                                  "type": "string",
+                                  "minLength": 1
+                                },
+                                "action_text": {
+                                  "type": "string",
+                                  "minLength": 1
+                                },
+                                "action_name": {
+                                  "type": "string",
+                                  "minLength": 1
+                                },
+                                "scope": {
+                                  "anyOf": [
+                                    {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "object",
+                                        "properties": {
+                                          "role": {
+                                            "type": "string",
+                                            "minLength": 1
+                                          },
+                                          "name": {
+                                            "type": "string"
+                                          },
+                                          "exact": {
+                                            "type": "boolean",
+                                            "const": true
+                                          },
+                                          "frame": {
+                                            "type": "object",
+                                            "properties": {
+                                              "name": {
+                                                "type": "string"
+                                              },
+                                              "url_path": {
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "name",
+                                              "url_path"
+                                            ],
+                                            "additionalProperties": false
+                                          }
+                                        },
+                                        "required": [
+                                          "role",
+                                          "name",
+                                          "exact"
+                                        ],
+                                        "additionalProperties": false
+                                      }
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "required_matches": {
+                                  "type": "number",
+                                  "const": 1
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "row_role",
+                                "action_role",
+                                "scope",
+                                "required_matches"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
                                   "const": "semantic"
                                 },
                                 "role": {
@@ -663,6 +840,13 @@
                                 },
                                 "name": {
                                   "$ref": "#/$defs/__schema0"
+                                },
+                                "match_by": {
+                                  "type": "string",
+                                  "enum": [
+                                    "name",
+                                    "text"
+                                  ]
                                 },
                                 "exact": {
                                   "type": "boolean",
@@ -1191,6 +1375,91 @@
                   "properties": {
                     "kind": {
                       "type": "string",
+                      "const": "row_action"
+                    },
+                    "row_role": {
+                      "type": "string",
+                      "const": "row"
+                    },
+                    "action_role": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "action_text": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "action_name": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "scope": {
+                      "anyOf": [
+                        {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "role": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "name": {
+                                "type": "string"
+                              },
+                              "exact": {
+                                "type": "boolean",
+                                "const": true
+                              },
+                              "frame": {
+                                "type": "object",
+                                "properties": {
+                                  "name": {
+                                    "type": "string"
+                                  },
+                                  "url_path": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "name",
+                                  "url_path"
+                                ],
+                                "additionalProperties": false
+                              }
+                            },
+                            "required": [
+                              "role",
+                              "name",
+                              "exact"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "required_matches": {
+                      "type": "number",
+                      "const": 1
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "row_role",
+                    "action_role",
+                    "scope",
+                    "required_matches"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "type": "string",
                       "const": "semantic"
                     },
                     "role": {
@@ -1199,6 +1468,13 @@
                     },
                     "name": {
                       "$ref": "#/$defs/__schema0"
+                    },
+                    "match_by": {
+                      "type": "string",
+                      "enum": [
+                        "name",
+                        "text"
+                      ]
                     },
                     "exact": {
                       "type": "boolean",
@@ -1385,6 +1661,91 @@
               "properties": {
                 "kind": {
                   "type": "string",
+                  "const": "row_action"
+                },
+                "row_role": {
+                  "type": "string",
+                  "const": "row"
+                },
+                "action_role": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "action_text": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "action_name": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "scope": {
+                  "anyOf": [
+                    {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "role": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "exact": {
+                            "type": "boolean",
+                            "const": true
+                          },
+                          "frame": {
+                            "type": "object",
+                            "properties": {
+                              "name": {
+                                "type": "string"
+                              },
+                              "url_path": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "name",
+                              "url_path"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "required": [
+                          "role",
+                          "name",
+                          "exact"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "required_matches": {
+                  "type": "number",
+                  "const": 1
+                }
+              },
+              "required": [
+                "kind",
+                "row_role",
+                "action_role",
+                "scope",
+                "required_matches"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
                   "const": "semantic"
                 },
                 "role": {
@@ -1393,6 +1754,13 @@
                 },
                 "name": {
                   "$ref": "#/$defs/__schema0"
+                },
+                "match_by": {
+                  "type": "string",
+                  "enum": [
+                    "name",
+                    "text"
+                  ]
                 },
                 "exact": {
                   "type": "boolean",

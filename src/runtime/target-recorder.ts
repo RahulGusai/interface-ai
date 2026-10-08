@@ -3,6 +3,7 @@ import { PNG } from "pngjs";
 import { createHash } from "node:crypto";
 import type { Capture, Target } from "../contracts/observation.js";
 import type { DurableTarget } from "../contracts/artifact.js";
+import { rowMatchesValues } from "./row-selection.js";
 export const recordingHint = z.strictObject({
   visual_reference: z.strictObject({
     rect: z.strictObject({
@@ -22,6 +23,8 @@ export function recordDurableTarget(
   target: Target,
   capture: Capture,
   hint?: unknown,
+  rowMatch?: Record<string, unknown>,
+  variableInputs?: Record<string, unknown>,
 ): {
   target: DurableTarget;
   crop?: Buffer;
@@ -29,24 +32,97 @@ export function recordDurableTarget(
 } {
   const observation = capture.observation;
   if (observation.status !== "ok") throw Error("REFERENCE_CAPTURE_REQUIRED");
+  if (rowMatch && Object.keys(rowMatch).length && target.kind !== "control")
+    throw Error("ROW_ACTION_UNSUPPORTED");
   if (target.kind === "control") {
     if (observation.controls.status !== "available")
       throw Error("REFERENCE_CAPTURE_REQUIRED");
-    const control = observation.controls.items.find(
-      (c) => c.ref === target.control_ref,
-    );
+    const controls = observation.controls.items;
+    const control = controls.find((c) => c.ref === target.control_ref);
     if (!control) throw Error("STALE_REFERENCE");
-    const scope = control.ancestry?.length
-      ? control.ancestry.map((a, index) => ({
+    const inputValues = Object.values(variableInputs ?? {})
+      .filter(
+        (v) =>
+          ["string", "number", "boolean"].includes(typeof v) &&
+          String(v).length > 0,
+      )
+      .map((value) => String(value).toLowerCase());
+    const stableAncestry = (ancestry: typeof control.ancestry) => {
+      if (!ancestry) return null;
+      const dynamicAt = ancestry.findIndex((a) =>
+        inputValues.some((value) => a.name.toLowerCase().includes(value)),
+      );
+      return dynamicAt < 0 ? ancestry : ancestry.slice(0, dynamicAt);
+    };
+    if (rowMatch && Object.keys(rowMatch).length) {
+      const row = controls.find(
+        (item) => item.ref === control.parent_ref && item.role === "row",
+      );
+      if (!row) throw Error("ROW_ACTION_UNSUPPORTED");
+      const matchingRows = controls.filter(
+        (item) =>
+          item.role === "row" && rowMatchesValues(item, controls, rowMatch),
+      );
+      if (matchingRows.length > 1) throw Error("ROW_SELECTION_AMBIGUOUS");
+      if (matchingRows.length !== 1 || matchingRows[0]?.ref !== row.ref)
+        throw Error("ROW_SELECTION_MISMATCH");
+      const actionText = control.text?.trim();
+      const actionName = actionText ? undefined : control.name;
+      if (!actionText && !actionName) throw Error("ROW_ACTION_UNSUPPORTED");
+      if (
+        actionText &&
+        Object.values(rowMatch).some((v) => actionText.includes(String(v)))
+      )
+        throw Error("ROW_ACTION_UNSUPPORTED");
+      if (
+        actionName &&
+        Object.values(rowMatch).some((v) => actionName.includes(String(v)))
+      )
+        throw Error("ROW_ACTION_UNSUPPORTED");
+      const matchingActions = controls.filter(
+        (item) =>
+          item.parent_ref === row.ref &&
+          item.role === control.role &&
+          (actionText
+            ? item.text?.trim() === actionText
+            : item.name === actionName),
+      );
+      if (matchingActions.length !== 1) throw Error("ROW_ACTION_AMBIGUOUS");
+      return {
+        target: {
+          kind: "row_action",
+          row_role: "row",
+          action_role: control.role,
+          ...(actionText
+            ? { action_text: actionText }
+            : { action_name: actionName }),
+          scope: stableAncestry(row.ancestry),
+          required_matches: 1,
+        },
+      };
+    }
+    const scope = stableAncestry(control.ancestry)?.length
+      ? stableAncestry(control.ancestry)!.map((a, index) => ({
           ...a,
-          ...(index === 0 && control.frame ? { frame: control.frame } : {}),
+          ...(index === 0 && control.frame && !inputValues.length
+            ? { frame: control.frame }
+            : {}),
         }))
       : null;
+    const visibleText = control.text?.trim();
+    const useText =
+      ["link", "button"].includes(control.role) &&
+      !!visibleText &&
+      visibleText !== control.name;
+    const stableName = useText ? visibleText : control.name;
+    if (inputValues.some((v) => stableName.toLowerCase().includes(v)))
+      throw Error("TARGET_DEPENDS_ON_INPUT");
     return {
       target: {
         kind: "semantic",
         role: control.role,
-        name: { kind: "literal", value: control.name },
+        name: { kind: "literal", value: stableName },
+        ...(useText ? { match_by: "text" as const } : {}),
         exact: true,
         scope,
         required_matches: 1,

@@ -68,6 +68,17 @@ it("builds extraction output bindings from the recorded overview and transaction
     },
     capability_catalog: [],
     inputs: {},
+    metadata: {
+      name: "Read account",
+      description: "Read account details",
+      input_schema: {
+        type: "object",
+        properties: {},
+        required: [],
+        additionalProperties: false,
+      },
+      example_inputs: {},
+    },
     records: [],
     references: [],
   };

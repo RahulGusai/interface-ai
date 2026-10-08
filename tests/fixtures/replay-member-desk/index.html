@@ -36,9 +36,13 @@
           results.append(p);
           return;
         }
+        const table = document.createElement("table");
+        const row = table.insertRow();
+        row.insertCell().textContent = value;
         const link = document.createElement("a");
         link.href = "#member";
-        link.textContent = value;
+        link.setAttribute("aria-label", `Open ${value}`);
+        link.textContent = "Open";
         link.onclick = (e) => {
           e.preventDefault();
           results.replaceChildren();
@@ -49,7 +53,8 @@
           status.textContent = members[value];
           results.append(heading, status);
         };
-        results.append(link);
+        row.insertCell().append(link);
+        results.append(table);
       };
     </script>
   </body>

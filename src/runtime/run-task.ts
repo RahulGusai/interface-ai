@@ -20,6 +20,12 @@ import { toolValidationMessage } from "./validation-feedback.js";
 import { buildInitialMessages, DISCOVERY_PROMPT } from "./prompts.js";
 import type { AuditSink } from "./audit.js";
 import { dispatchTool, type DispatchContext } from "./dispatch.js";
+import { parseCapabilityMetadata } from "./capability-metadata.js";
+import { validateValues } from "../contracts/artifact.js";
+import {
+  discoveryExpressionJson,
+  resolveDiscoveryArguments,
+} from "./discovery-bindings.js";
 import {
   toolDefinitions,
   toolSchemas,
@@ -57,23 +63,54 @@ export async function runTask(
   let auditFailed = false;
   let currentCapture: Capture | undefined;
   const definitions = options.discovery
-    ? toolDefinitions.map((d) =>
-        ["click", "type_text", "scroll"].includes(d.function.name)
-          ? {
-              ...d,
-              function: {
-                ...d.function,
-                parameters: {
-                  ...d.function.parameters,
-                  properties: {
-                    ...(d.function.parameters as any).properties,
-                    recording_hint: recordingHint.toJSONSchema(),
-                  },
-                },
-              },
-            }
-          : d,
-      )
+    ? toolDefinitions.map((d) => {
+        const name = d.function.name;
+        const original = (d.function.parameters as any).properties;
+        const properties: Record<string, any> = { ...original };
+        if (["click", "type_text", "scroll"].includes(name))
+          properties.recording_hint = recordingHint.toJSONSchema();
+        if (name === "type_text") properties.text = discoveryExpressionJson;
+        if (["click", "type_text"].includes(name))
+          properties.row_match = {
+            type: "object",
+            minProperties: 1,
+            additionalProperties: discoveryExpressionJson,
+          };
+        if (name === "select_option")
+          properties.option = {
+            ...original.option,
+            properties: {
+              ...original.option.properties,
+              label: discoveryExpressionJson,
+            },
+          };
+        if (["check_ui", "wait_for"].includes(name))
+          properties.condition = {
+            oneOf: original.condition.oneOf.map((variant: any) =>
+              variant.properties.expected
+                ? {
+                    ...variant,
+                    properties: {
+                      ...variant.properties,
+                      expected: discoveryExpressionJson,
+                    },
+                  }
+                : variant,
+            ),
+          };
+        if (name === "press_key")
+          properties.keys = {
+            ...original.keys,
+            items: discoveryExpressionJson,
+          };
+        return {
+          ...d,
+          function: {
+            ...d.function,
+            parameters: { ...d.function.parameters, properties },
+          },
+        };
+      })
     : toolDefinitions;
   const audit: AuditSink = async (record, image) => {
     if (auditFailed) throw new Error("Audit unavailable");
@@ -91,6 +128,8 @@ export async function runTask(
     let parsed: any;
     let recordedTarget: any;
     let hint: any;
+    let resolved: any;
+    let rowMatch: Record<string, unknown> | undefined;
     let preflight: ToolResponse | undefined;
     try {
       parsed = JSON.parse(call.argumentsJson);
@@ -103,7 +142,13 @@ export async function runTask(
         delete parsed.recording_hint;
       }
       try {
-        const action = parseToolAction(call.name, parsed);
+        ({ resolved, rowMatch } = resolveDiscoveryArguments(
+          call.name,
+          parsed,
+          options.discovery.inputs,
+          options.discovery.metadata?.input_schema.properties ?? {},
+        ));
+        const action = parseToolAction(call.name, resolved);
         if (action.name === "finish_task") parsed = action.input;
         if (
           "observation_id" in action.input &&
@@ -133,38 +178,66 @@ export async function runTask(
         };
       }
       if (!preflight && parsed.target) {
-        if (
-          !currentCapture ||
-          currentCapture.observation.status !== "ok" ||
-          parsed.observation_id !== currentCapture.observation.observation_id
-        )
-          throw Error("REFERENCE_CAPTURE_REQUIRED");
-        const recorded = recordDurableTarget(
-          parsed.target,
-          currentCapture,
-          hint,
-        );
-        recordedTarget = recorded.target;
-        if (recorded.crop) {
-          await options.discovery.recordReference?.(
-            recorded,
-            recorded.crop,
+        try {
+          if (
+            !currentCapture ||
+            currentCapture.observation.status !== "ok" ||
+            parsed.observation_id !== currentCapture.observation.observation_id
+          )
+            throw Error("REFERENCE_CAPTURE_REQUIRED");
+          const recorded = recordDurableTarget(
+            parsed.target,
             currentCapture,
-            call.id,
+            hint,
+            rowMatch,
+            options.discovery.inputs,
           );
+          recordedTarget = recorded.target;
+          if (recorded.crop) {
+            await options.discovery.recordReference?.(
+              recorded,
+              recorded.crop,
+              currentCapture,
+              call.id,
+            );
+          }
+        } catch (error) {
+          preflight = {
+            result: {
+              status: "error",
+              code: "INVALID_TOOL_CALL",
+              message: toolValidationMessage(error),
+            },
+          };
         }
       }
       if (!preflight && call.name === "extract_data") {
-        if (!currentCapture) throw Error("REFERENCE_CAPTURE_REQUIRED");
-        parsed._durable_fields = Object.fromEntries(
-          parsed.fields.map((f: any) => [
-            f.name,
-            recordDurableTarget(f.target, currentCapture!).target,
-          ]),
-        );
+        try {
+          if (!currentCapture) throw Error("REFERENCE_CAPTURE_REQUIRED");
+          parsed._durable_fields = Object.fromEntries(
+            parsed.fields.map((f: any) => [
+              f.name,
+              recordDurableTarget(
+                f.target,
+                currentCapture!,
+                undefined,
+                undefined,
+                options.discovery!.inputs,
+              ).target,
+            ]),
+          );
+        } catch (error) {
+          preflight = {
+            result: {
+              status: "error",
+              code: "INVALID_TOOL_CALL",
+              message: toolValidationMessage(error),
+            },
+          };
+        }
       }
     }
-    const normalized = { ...parsed };
+    const normalized = { ...(resolved ?? parsed) };
     delete normalized._durable_fields;
     const dispatchedCall = {
       ...call,
@@ -276,6 +349,37 @@ export async function runTask(
       maxToolCalls: budget,
     });
     options.signal?.throwIfAborted();
+    if (options.discovery) {
+      try {
+        if (!options.discovery!.metadata) {
+          if (!deps.model.generateCapability)
+            throw Error("METADATA_GENERATOR_UNAVAILABLE");
+          options.discovery!.metadata = parseCapabilityMetadata(
+            await deps.model.generateCapability(
+              input.goal,
+              options.discovery!.inputs,
+              { signal: options.signal },
+            ),
+          );
+        }
+        options.discovery!.inputs = validateValues(
+          options.discovery!.metadata.input_schema,
+          {
+            ...options.discovery!.metadata.example_inputs,
+            ...options.discovery!.inputs,
+          },
+        );
+      } catch {
+        return await stop(
+          result("provider_error", "Capability metadata generation failed", {
+            error: {
+              code: "CAPABILITY_METADATA_INVALID",
+              message: "Capability metadata generation failed",
+            },
+          }),
+        );
+      }
+    }
     const adapter = await deps.adapterFactory.createForTask(input);
     context = {
       adapter,
@@ -293,6 +397,7 @@ export async function runTask(
           instructions: DISCOVERY_PROMPT,
           deployment: options.discovery.deployment,
           capability_catalog: options.discovery.capability_catalog,
+          capability_metadata: options.discovery.metadata,
           requested_inputs: options.discovery.inputs,
         }),
       });

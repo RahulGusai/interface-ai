@@ -5,6 +5,48 @@ import { toolDefinitions } from "../../src/contracts/tools.js";
 const config = { apiKey: "SECRET", model: "provider/exact-model" };
 const turn = (message: unknown) =>
   new Response(JSON.stringify({ choices: [{ message }] }));
+it("requests typed capability metadata before discovery with a forced metadata tool", async () => {
+  let request: any;
+  const client = new OpenRouterClient(config, async (_url, options) => {
+    request = JSON.parse(String(options?.body));
+    return turn({
+      role: "assistant",
+      content: null,
+      tool_calls: [
+        {
+          id: "meta",
+          type: "function",
+          function: {
+            name: "define_capability",
+            arguments: JSON.stringify({
+              name: "Find customer status",
+              description: "Find a customer and report status",
+              input_schema: {
+                type: "object",
+                properties: { customer: { type: "string" } },
+                required: ["customer"],
+                additionalProperties: false,
+              },
+              example_inputs: { customer: "Freya" },
+            }),
+          },
+        },
+      ],
+    });
+  });
+  const metadata = await client.generateCapability(
+    "Find Freya and report status",
+    {},
+  );
+  expect(metadata.example_inputs).toEqual({ customer: "Freya" });
+  expect(request.tools.map((tool: any) => tool.function.name)).toEqual([
+    "define_capability",
+  ]);
+  expect(request.tool_choice).toEqual({
+    type: "function",
+    function: { name: "define_capability" },
+  });
+});
 it("projects PNG bytes, all tools and preserved IDs on every request", async () => {
   const fetcher = vi.fn(
     async (_url: string | URL | Request, _options?: RequestInit) =>

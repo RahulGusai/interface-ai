@@ -4,6 +4,10 @@ import { projectMessages, type InternalMessage } from "../runtime/history.js";
 import { agentTurnSchema, type AgentTurn } from "../contracts/run.js";
 import { SafeError } from "../contracts/errors.js";
 import type { toolDefinitions } from "../contracts/tools.js";
+import {
+  capabilityMetadataSchema,
+  parseCapabilityMetadata,
+} from "../runtime/capability-metadata.js";
 const responseSchema = z.object({
   choices: z
     .array(
@@ -81,10 +85,56 @@ export class OpenRouterClient implements ModelClient {
   ) {
     this.model = config.model;
   }
+  async generateCapability(
+    goal: string,
+    suppliedInputs: Record<string, unknown>,
+    options: { signal?: AbortSignal } = {},
+  ) {
+    const tools = [
+      {
+        type: "function" as const,
+        function: {
+          name: "define_capability",
+          description:
+            "Provide concise reusable capability metadata and typed example inputs extracted from the task",
+          parameters: z.toJSONSchema(capabilityMetadataSchema, { io: "input" }),
+        },
+      },
+    ];
+    const turn = await this.complete(
+      [
+        {
+          role: "system",
+          content:
+            "Define the reusable operation before browser discovery. Extract variable example inputs from the task. Use concise name and description without example-specific identities. Call define_capability once. Do not invent values missing from the task.",
+        },
+        { role: "user", content: JSON.stringify({ goal, suppliedInputs }) },
+      ],
+      tools as any,
+      { ...options, toolChoice: "define_capability" },
+    );
+    if (
+      turn.kind !== "tool_calls" ||
+      turn.calls.length !== 1 ||
+      turn.calls[0]?.name !== "define_capability"
+    )
+      throw new SafeError(
+        "PROVIDER_PROTOCOL",
+        "Capability metadata was not returned",
+      );
+    try {
+      return parseCapabilityMetadata(JSON.parse(turn.calls[0].argumentsJson));
+    } catch {
+      throw new SafeError(
+        "PROVIDER_PROTOCOL",
+        "Capability metadata was invalid",
+      );
+    }
+  }
   async complete(
     messages: InternalMessage[],
     tools: typeof toolDefinitions,
-    options: { signal?: AbortSignal } = {},
+    options: { signal?: AbortSignal; toolChoice?: string } = {},
   ): Promise<AgentTurn> {
     const projected = projectMessages(messages);
     const requestSignal = options.signal
@@ -115,6 +165,14 @@ export class OpenRouterClient implements ModelClient {
             model: this.model,
             messages: projected,
             tools,
+            ...(options.toolChoice
+              ? {
+                  tool_choice: {
+                    type: "function",
+                    function: { name: options.toolChoice },
+                  },
+                }
+              : {}),
             parallel_tool_calls: false,
             stream: false,
           }),

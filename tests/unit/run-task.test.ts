@@ -122,6 +122,17 @@ it("discovery rejects a stale retry after capture failure and recovers by observ
     },
     capability_catalog: [],
     inputs: {},
+    metadata: {
+      name: "Find member",
+      description: "Find a member",
+      input_schema: {
+        type: "object",
+        properties: {},
+        required: [],
+        additionalProperties: false,
+      },
+      example_inputs: {},
+    },
     records: [],
     references: [],
   };

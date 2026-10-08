@@ -18,6 +18,17 @@ const discovery = (): DiscoveryContext => ({
   },
   capability_catalog: [],
   inputs: {},
+  metadata: {
+    name: "Test capability",
+    description: "Test capability",
+    input_schema: {
+      type: "object",
+      properties: {},
+      required: [],
+      additionalProperties: false,
+    },
+    example_inputs: {},
+  },
   records: [],
   references: [],
 });

@@ -3,6 +3,7 @@ import type { DurableTarget } from "../contracts/artifact.js";
 import type { Capture, Control, Target } from "../contracts/observation.js";
 import { resolveBindings } from "./bindings.js";
 import { matchTemplate } from "./template-matcher.js";
+import { rowMatchesValues } from "../runtime/row-selection.js";
 export type BindingContext = {
   inputs: Record<string, unknown>;
   results: Record<string, unknown>;
@@ -23,7 +24,8 @@ export function semanticMatches(
   return capture.observation.controls.items.filter(
     (control) =>
       control.role === target.role &&
-      control.name === name &&
+      (target.match_by === "text" ? control.text?.trim() : control.name) ===
+        name &&
       (!target.scope ||
         target.scope.every((scope, index) => {
           const actual = control.ancestry?.[index];
@@ -42,11 +44,70 @@ export function resolveTarget(
   capture: Capture,
   assets: ReadonlyMap<string, Buffer>,
   c: BindingContext,
+  rowMatch?: Record<string, unknown>,
 ): { target?: Target; diagnosis: Record<string, unknown> } {
   let candidates: any[] = [];
   try {
     if (capture.observation.status !== "ok") throw Error("CAPTURE_FAILED");
-    if (target.kind === "semantic") {
+    if (target.kind === "row_action") {
+      if (
+        !rowMatch ||
+        !Object.keys(rowMatch).length ||
+        capture.observation.controls.status !== "available"
+      )
+        throw Error("ROW_MATCH_REQUIRED");
+      const selection = resolveBindings(
+        rowMatch,
+        c.inputs,
+        c.results,
+        c.environment,
+      );
+      const controls = capture.observation.controls.items;
+      const rows = controls.filter(
+        (row) =>
+          row.role === target.row_role &&
+          (!target.scope ||
+            target.scope.every(
+              (scope, index) =>
+                row.ancestry?.[index]?.role === scope.role &&
+                row.ancestry?.[index]?.name === scope.name,
+            )) &&
+          rowMatchesValues(row, controls, selection),
+      );
+      if (rows.length !== 1) {
+        return {
+          diagnosis: {
+            verdict: "failed",
+            reason: rows.length ? "TARGET_AMBIGUOUS" : "TARGET_NOT_FOUND",
+            target,
+            candidates: rows,
+            required_matches: 1,
+            observed: { count: rows.length },
+          },
+        };
+      }
+      candidates = rows.flatMap((row) =>
+        controls.filter(
+          (control) =>
+            control.parent_ref === row.ref &&
+            control.role === target.action_role &&
+            (target.action_text
+              ? control.text?.trim() === target.action_text
+              : control.name === target.action_name),
+        ),
+      );
+      if (candidates.length === 1)
+        return {
+          target: { kind: "control", control_ref: candidates[0].ref },
+          diagnosis: {
+            verdict: "resolved",
+            target,
+            candidates,
+            required_matches: 1,
+            observed: { count: 1 },
+          },
+        };
+    } else if (target.kind === "semantic") {
       candidates = semanticMatches(target, capture, c);
       if (candidates.length === 1)
         return {
