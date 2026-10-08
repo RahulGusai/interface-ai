@@ -110,3 +110,33 @@ it("duplicate target stops before Search dispatch and persists fresh failure evi
     await fixture.close();
   }
 });
+it("hidden-wait capture includes physically visible aria-hidden controls", async () => {
+  const fixture = await startFixture(
+    undefined,
+    '<div role="status" aria-hidden="true">Loading</div>',
+  );
+  const adapter = await createBrowserFactory({ headless: true }).createForTask({
+    goal: "Check visibility",
+    targetUrl: fixture.url,
+  });
+  try {
+    await adapter.execute({ name: "navigate", input: { url: fixture.url } });
+    const normal = await adapter.capture("controls");
+    const physical = await adapter.capture("controls", {
+      includeAriaHidden: true,
+    });
+    expect(
+      (normal.observation as any).controls.items.some(
+        (c: any) => c.role === "status",
+      ),
+    ).toBe(false);
+    expect(
+      (physical.observation as any).controls.items.some(
+        (c: any) => c.role === "status" && c.name === "Loading",
+      ),
+    ).toBe(true);
+  } finally {
+    await adapter.close();
+    await fixture.close();
+  }
+});

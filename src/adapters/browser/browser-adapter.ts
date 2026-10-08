@@ -107,20 +107,24 @@ export class BrowserAdapter implements BrowserAdapterPort {
       [...old.values()].map((b) => b.element.dispose().catch(() => {})),
     );
   }
-  async capture(mode: "screenshot" | "controls" | "both"): Promise<Capture> {
+  async capture(
+    mode: "screenshot" | "controls" | "both",
+    options?: { includeAriaHidden?: boolean },
+  ): Promise<Capture> {
     if (this.busy || this.poisoned) return { observation: failedObservation() };
     this.busy = true;
     try {
-      return await this.captureInternal(mode);
+      return await this.captureInternal(mode, options?.includeAriaHidden);
     } finally {
       this.busy = false;
     }
   }
   private async captureInternal(
     mode: "screenshot" | "controls" | "both",
+    includeAriaHidden = false,
   ): Promise<Capture> {
     let timer: ReturnType<typeof setTimeout> | undefined;
-    const operation = this.captureAttempt(mode);
+    const operation = this.captureAttempt(mode, includeAriaHidden);
     this.pending = operation;
     try {
       const outcome = await Promise.race([
@@ -146,6 +150,7 @@ export class BrowserAdapter implements BrowserAdapterPort {
   }
   private async captureAttempt(
     mode: "screenshot" | "controls" | "both",
+    includeAriaHidden = false,
   ): Promise<Capture> {
     const deadline = performance.now() + this.options.captureMs;
     await this.invalidate();
@@ -171,7 +176,10 @@ export class BrowserAdapter implements BrowserAdapterPort {
         };
         if (mode !== "screenshot") {
           if (this.options.semanticCapture) {
-            const collected = await collectControls(this.page);
+            const collected = await collectControls(
+              this.page,
+              includeAriaHidden,
+            );
             fresh = collected.bindings;
             controls = { status: "available", items: collected.controls };
           } else controls = { status: "unavailable" };

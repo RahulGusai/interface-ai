@@ -230,7 +230,13 @@ export async function runReplay(
         }
       };
       await withRecovery(s.pre_checks);
-      let capture = await fresh();
+      const hiddenWait =
+        s.tool === "wait_for" &&
+        resolveBindings(s.arguments.condition, inputs, results, c.environment)
+          ?.kind === "hidden";
+      let capture = hiddenWait
+        ? await adapter!.capture("both", { includeAriaHidden: true })
+        : await fresh();
       if (capture.observation.status !== "ok") throw Error("CAPTURE_FAILED");
       const resolve = async (
         saved: any,
@@ -253,12 +259,7 @@ export async function runReplay(
         for (const field of s.arguments.fields) {
           const { target, row_match, ...fieldArguments } = field;
           args.fields.push({
-            ...resolveBindings(
-              fieldArguments,
-              inputs,
-              results,
-              c.environment,
-            ),
+            ...resolveBindings(fieldArguments, inputs, results, c.environment),
             target: await resolve(target, row_match),
           });
         }
@@ -278,6 +279,28 @@ export async function runReplay(
             capture.image,
             s.step_id,
           );
+          if (
+            !r.target &&
+            r.diagnosis.reason === "TARGET_NOT_FOUND" &&
+            s.tool === "wait_for" &&
+            args.condition?.kind === "hidden" &&
+            s.target.kind === "semantic" &&
+            capture.observation.controls.status === "available"
+          ) {
+            // The fresh complete control capture already proves the disappearance condition.
+            results[s.step_id] = { status: "condition_met", elapsed_ms: 0 };
+            await audit(
+              "wait_condition_satisfied",
+              {
+                condition: "hidden",
+                evidence: "target_absent_in_fresh_capture",
+              },
+              capture.image,
+              s.step_id,
+            );
+            await withRecovery(s.post_checks);
+            return;
+          }
           if (!r.target) throw Error(String(r.diagnosis.reason));
           args.target = r.target;
         }

@@ -149,7 +149,16 @@ export function recordDurableTarget(
       if (matchingRows.length !== 1 || matchingRows[0]?.ref !== row.ref)
         throw new SafeError(
           "ROW_SELECTION_MISMATCH",
-          "row_match does not identify the selected row." + rowHint,
+          "row_match does not identify the selected row. Nonmatching criteria: " +
+            Object.entries(rowMatch)
+              .filter(
+                ([key, value]) =>
+                  !rowMatchesValues(row, controls, { [key]: value }),
+              )
+              .map(([key]) => key)
+              .join(", ") +
+            ". Remove nonmatching criteria if the remaining bound criteria uniquely identify the intended row; do not replace them with observed literals." +
+            rowHint,
         );
       const actionText = control.text?.trim();
       const actionName = actionText ? undefined : control.name;

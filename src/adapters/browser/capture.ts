@@ -3,8 +3,9 @@ import type { Binding, Element } from "./targets.js";
 import type { Control } from "../../contracts/observation.js";
 export async function readSemantics(
   element: Element,
+  includeAriaHidden = false,
 ): Promise<Omit<Control, "ref"> | null> {
-  return element.evaluate((e) => {
+  return element.evaluate((e, includeAriaHidden) => {
     // Native option labels are rendered by the browser's select UI, even when its popup is closed.
     if (e instanceof HTMLOptionElement) {
       const select = e.closest("select");
@@ -41,7 +42,7 @@ export async function readSemantics(
       r.height === 0 ||
       style.visibility === "hidden" ||
       style.display === "none" ||
-      e.closest('[aria-hidden="true"]')
+      (!includeAriaHidden && e.closest('[aria-hidden="true"]'))
     )
       return null;
     const tag = e.tagName.toLowerCase();
@@ -179,9 +180,12 @@ export async function readSemantics(
         ? { value: String(input.value) }
         : {}),
     };
-  });
+  }, includeAriaHidden);
 }
-export async function collectControls(page: Page): Promise<{
+export async function collectControls(
+  page: Page,
+  includeAriaHidden = false,
+): Promise<{
   controls: Control[];
   bindings: Map<string, Binding>;
   links: string[];
@@ -196,7 +200,7 @@ export async function collectControls(page: Page): Promise<{
       const rowRefs = new Map<string, string>();
       for (const element of elements) handles.add(element);
       for (const element of elements) {
-        const semantics = await readSemantics(element);
+        const semantics = await readSemantics(element, includeAriaHidden);
         if (!semantics) {
           await element.dispose();
           handles.delete(element);

@@ -33,7 +33,7 @@ class Reads:
         events = self.repo.rows(
             "run_events", "run_id=?", (row["run_id"],), "sequence DESC"
         )
-        steps = [x for x in events if x["type"] == "tool_finished" and x["step_id"]]
+        steps = [x for x in events if x["type"] in ("tool_finished", "wait_condition_satisfied") and x["step_id"]]
         total = None
         if row["pinned_artifact_id"]:
             total = len(
@@ -64,7 +64,7 @@ class Reads:
                     {
                         e["step_id"]
                         for e in steps
-                        if e["payload"].get("dispatch_state") == "completed"
+                        if e["payload"].get("dispatch_state") == "completed" or e["type"] == "wait_condition_satisfied"
                     }
                 )
                 if total is not None

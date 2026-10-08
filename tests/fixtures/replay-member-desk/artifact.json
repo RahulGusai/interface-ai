@@ -13,7 +13,9 @@
         "format": "email"
       }
     },
-    "required": ["email"],
+    "required": [
+      "email"
+    ],
     "additionalProperties": false
   },
   "output_schema": {
@@ -23,7 +25,9 @@
         "type": "string"
       }
     },
-    "required": ["status"],
+    "required": [
+      "status"
+    ],
     "additionalProperties": false
   },
   "entry": {
@@ -106,18 +110,22 @@
     {
       "step_id": "s003",
       "tool": "click",
-      "arguments": {},
+      "arguments": {
+        "row_match": {
+          "email": {
+            "kind": "input",
+            "path": "email"
+          }
+        }
+      },
       "pre_checks": [],
       "post_checks": [],
       "recoveries": [],
       "target": {
-        "kind": "semantic",
-        "role": "link",
-        "name": {
-          "kind": "input",
-          "path": "email"
-        },
-        "exact": true,
+        "kind": "row_action",
+        "row_role": "row",
+        "action_role": "link",
+        "action_text": "Open",
         "scope": null,
         "required_matches": 1
       }
