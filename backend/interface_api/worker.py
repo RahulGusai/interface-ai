@@ -43,7 +43,7 @@ class Worker:
                     conn=c,
                 )
             c.execute(
-                "UPDATE artifacts SET state='validation_failed' WHERE state IN ('draft','validating')"
+                "UPDATE artifacts SET state='validation_failed' WHERE state='validating' OR (state='draft' AND source_run_id IN (SELECT run_id FROM runs WHERE status='interrupted'))"
             )
         sweep_staging(self.repo, self.settings.database_path.parent / "staging")
         return len(rows)
@@ -205,7 +205,7 @@ class Worker:
                     "runner_completed",
                     {
                         "runtime_result": message["runtime_result"],
-                        "discovery_proposal": message.get("discovery_proposal"),
+                        "discovery_artifact": message.get("discovery_artifact"),
                     },
                 )
                 return {"event_sequence": event["sequence"], "continue": True}

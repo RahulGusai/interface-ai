@@ -161,7 +161,11 @@ it("discovery rejects a stale retry after capture failure and recovers by observ
   expect(
     histories[2]?.find((m) => m.role === "tool" && m.tool_call_id === "retry"),
   ).toMatchObject({ content: expect.stringContaining("STALE_OBSERVATION") });
-  expect(discovery.records.map((r) => r.call_id)).toEqual(["search", "fresh"]);
+  expect(discovery.records.map((r) => r.call_id)).toEqual([
+    "bootstrap",
+    "search",
+    "fresh",
+  ]);
   expect(adapter.closed).toBe(true);
 });
 it("backend discovery needs no policy and bootstraps the deployment URL before clicking", async () => {
@@ -235,6 +239,7 @@ it("processes last-slot finish honestly and request_human stops batch", async ()
                 observation_id: "obs_1",
                 outcome: "goal_achieved",
                 summary: "done",
+                outputs: {},
               }
             : { observation_id: "obs_1", reason: "stuck", message: "help" },
         ),
@@ -242,9 +247,7 @@ it("processes last-slot finish honestly and request_human stops batch", async ()
     ]);
     const r = await runTask(input, s.deps, { maxToolCalls: 1 });
     expect(r.status).toBe(
-      name === "finish_task"
-        ? "awaiting_artifact_design"
-        : "needs_intervention",
+      name === "finish_task" ? "goal_achieved" : "needs_intervention",
     );
     expect(r.toolCallsUsed).toBe(1);
     expect(s.adapters[0]?.closed).toBe(true);

@@ -39,7 +39,7 @@ it("scripted model + real Chromium delivers first/later images and matching tool
       },
       { maxToolCalls: 8, onEvent: (e) => events.push(e.type) },
     );
-    expect(result.status).toBe("awaiting_artifact_design");
+    expect(result.status).toBe("goal_achieved");
     expect(result.toolCallsUsed).toBe(4);
     expect(requests).toBe(4);
     expect(events.filter((e) => e === "tool_completed")).toHaveLength(4);

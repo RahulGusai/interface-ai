@@ -41,13 +41,6 @@ lines.on("line", (line) => {
 });
 async function execute(c: ReturnType<typeof startSchema.parse>) {
   await transport!.send("ready");
-  const contract = {
-    validateOutputs: (outputs: Record<string, unknown>) =>
-      Object.values(outputs).every((v) =>
-        ["string", "number", "boolean"].includes(typeof v),
-      ),
-    businessCodes: ["not_found"],
-  };
   const factory = createBrowserFactory({ headless: c.runtime.headless });
   const emit = async (
     type: string,
@@ -75,7 +68,7 @@ async function execute(c: ReturnType<typeof startSchema.parse>) {
     );
   };
   let result: any;
-  let proposal: any = null;
+  let artifact: any = null;
   if (c.mode === "discovery") {
     const discovery: DiscoveryContext = {
       deployment: c.deployment,
@@ -119,7 +112,7 @@ async function execute(c: ReturnType<typeof startSchema.parse>) {
     });
     result = await runTask(
       { goal: c.task, targetUrl: c.deployment.base_url },
-      { model, adapterFactory: factory, contract },
+      { model, adapterFactory: factory },
       {
         discovery,
         signal: controller.signal,
@@ -144,7 +137,7 @@ async function execute(c: ReturnType<typeof startSchema.parse>) {
         },
       },
     );
-    proposal = discovery.proposal ?? null;
+    artifact = discovery.artifact ?? null;
   } else {
     const modulePath = "../replay/run-replay.js";
     const { runReplay } = await import(modulePath);
@@ -156,7 +149,7 @@ async function execute(c: ReturnType<typeof startSchema.parse>) {
   }
   await transport!.send(
     "completed",
-    { runtime_result: result, discovery_proposal: proposal },
+    { runtime_result: result, discovery_artifact: artifact },
     true,
   );
   lines.close();

@@ -396,50 +396,25 @@ it("keeps tool-result batches contiguous while pairing each image with its call 
     }),
   ).toThrow();
 });
-it("does not fabricate artifact acceptance or accept unknown outputs/business codes", () => {
+it("accepts reporting completion without enforcing semantic output or business-code contracts", () => {
   const p = syntheticContract();
-  expect(
-    finalize(
-      { observation_id: "o", outcome: "goal_achieved", summary: "done" },
-      p,
-    ),
-  ).toMatchObject({
-    status: "rejected",
-    code: "ARTIFACT_INTEGRATION_REQUIRED",
-  });
-  expect(
-    finalize(
-      {
-        observation_id: "o",
-        outcome: "business_outcome",
-        outcome_code: "bogus",
-        summary: "done",
-      },
-      p,
-    ),
-  ).toMatchObject({ status: "rejected" });
-  expect(
-    finalize(
-      {
-        observation_id: "o",
-        outcome: "unable_to_complete",
-        outputs: { secret: "bad" },
-        summary: "done",
-      },
-      p,
-    ),
-  ).toMatchObject({ status: "rejected" });
-  expect(
-    finalize(
-      {
-        observation_id: "o",
-        outcome: "business_outcome",
-        outcome_code: "not_found",
-        summary: "No member",
-      },
-      p,
-    ),
-  ).toMatchObject({ status: "accepted" });
+  for (const input of [
+    { outcome: "goal_achieved" as const, summary: "done", outputs: {} },
+    {
+      outcome: "business_outcome" as const,
+      outcome_code: "bogus",
+      summary: "done",
+    },
+    {
+      outcome: "unable_to_complete" as const,
+      outputs: { extra: [null] },
+      summary: "done",
+    },
+  ])
+    expect(finalize(input, p)).toMatchObject({
+      status: "accepted",
+      outcome: input.outcome,
+    });
 });
 it("only accepts finite plain decimal numbers", () => {
   for (const s of [

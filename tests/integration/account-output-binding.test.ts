@@ -35,13 +35,8 @@ const field = (name: string, label: string, output_type = "string") => ({
   property: "text",
   output_type,
 });
-const binding = (step_id: string, name: string) => ({
-  kind: "step_output",
-  step_id,
-  path: `fields.${name}.value`,
-});
 
-it("preserves overview values after navigation and repairs a transaction-total output binding", async () => {
+it("builds extraction output bindings from the recorded overview and transaction steps", async () => {
   const fixture = await startFixture(undefined, html);
   const records: AuditRecord[] = [];
   const providerHistories: any[][] = [];
@@ -61,75 +56,6 @@ it("preserves overview values after navigation and repairs a transaction-total o
     largest_debit: 571.3,
     debit_date: "2026-01-13",
     debit_description: "ATM WITHDRAWAL - BR 031",
-  };
-  const input_schema = {
-    type: "object",
-    properties: {},
-    required: [],
-    additionalProperties: false,
-  };
-  const output_schema = {
-    type: "object",
-    properties: {
-      account_number: { type: "string" },
-      current_balance: { type: "number" },
-      largest_debit: { type: "number" },
-      debit_date: { type: "string" },
-      debit_description: { type: "string" },
-    },
-    required: Object.keys(outputs),
-    additionalProperties: false,
-  };
-  const definition = {
-    surface: "browser",
-    compatibility: {
-      product_id: "bank",
-      ui_variant: "standard",
-      vendor_release: null,
-    },
-    input_schema,
-    output_schema,
-    entry: { url: { kind: "environment", path: "base_url" }, checks: [] },
-    steps: [
-      {
-        step_id: "read_overview",
-        tool: "extract_data",
-        arguments: { fields: overviewFields },
-      },
-      {
-        step_id: "open_transactions",
-        tool: "click",
-        arguments: {},
-        target: semantic("button", "Transactions"),
-      },
-      {
-        step_id: "read_transactions",
-        tool: "extract_data",
-        arguments: { fields: transactionFields },
-      },
-    ],
-    success_checks: [
-      {
-        check_id: "balance_read",
-        kind: "tool_status_equals",
-        step_id: "read_overview",
-        expected: "completed",
-      },
-      {
-        check_id: "transactions_read",
-        kind: "tool_status_equals",
-        step_id: "read_transactions",
-        expected: "completed",
-      },
-    ],
-    business_outcomes: [],
-    output_mapping: {
-      account_number: binding("read_overview", "account_number"),
-      current_balance: binding("read_transactions", "transaction_totals"),
-      largest_debit: binding("read_transactions", "largest_debit"),
-      debit_date: binding("read_transactions", "debit_date"),
-      debit_description: binding("read_transactions", "debit_description"),
-    },
   };
   const discovery: DiscoveryContext = {
     deployment: {
@@ -190,40 +116,14 @@ it("preserves overview values after navigation and repairs a transaction-total o
                   target: target("button", "Transactions"),
                 };
                 break;
-              case 5:
-                name = "observe_ui";
-                input = { mode: "both" };
-                break;
-              default: {
+              default:
                 name = "finish_task";
-                const repaired = structuredClone(definition);
-                if (turn >= 6)
-                  repaired.output_mapping.current_balance = binding(
-                    "read_overview",
-                    "current_balance",
-                  );
                 input = {
-                  observation_id: o.observation_id,
                   outcome: "goal_achieved",
                   summary: "Account read",
                   outputs,
-                  proposal: {
-                    proposal_version: 1,
-                    capability_selection: {
-                      mode: "new",
-                      name: "Account report",
-                      description: "Read overview and debit details",
-                      reason: "No catalog operation",
-                      input_schema,
-                      output_schema,
-                    },
-                    parameter_values: {},
-                    observed_outputs: outputs,
-                    definition: repaired,
-                    reference_assets: [],
-                  },
                 };
-              }
+                break;
             }
             const calls = [
               { id: `c${turn}`, name, argumentsJson: JSON.stringify(input) },
@@ -248,19 +148,12 @@ it("preserves overview values after navigation and repairs a transaction-total o
         },
       },
     );
-    expect(result.status).toBe("awaiting_artifact_design");
+    expect(result.status).toBe("goal_achieved");
     expect(result.outputs).toEqual(outputs);
-    expect(turn).toBe(6);
-    const rejected = records.find(
-      (r) => r.type === "tool_finished" && r.call.id === "c4",
-    );
-    expect(rejected).toMatchObject({
-      result: {
-        status: "rejected",
-        code: "DURABLE_PROPOSAL_INVALID",
-        message: expect.stringContaining("output_mapping/observed_outputs"),
-      },
-    });
+    expect(turn).toBe(4);
+    expect(
+      records.find((r) => r.type === "tool_finished" && r.call.id === "c4"),
+    ).toMatchObject({ result: { status: "accepted" } });
     const historicalOverview = providerHistories[3]!.find(
       (m) => m.role === "tool" && m.tool_call_id === "c1",
     );
@@ -273,15 +166,15 @@ it("preserves overview values after navigation and repairs a transaction-total o
     });
     expect(preserved).not.toHaveProperty("observation");
     expect(
-      discovery.proposal?.definition.output_mapping.current_balance,
+      discovery.artifact?.definition.output_mapping.current_balance,
     ).toEqual({
       kind: "step_output",
-      step_id: "read_overview",
+      step_id: "step_2",
       path: "fields.current_balance.value",
     });
-    expect(discovery.proposal?.observed_outputs).toEqual(outputs);
-    expect(records.filter((r) => r.type === "tool_started")).toHaveLength(7);
-    expect(records.filter((r) => r.type === "tool_finished")).toHaveLength(7);
+    expect(discovery.artifact?.observed_outputs).toEqual(outputs);
+    expect(records.filter((r) => r.type === "tool_started")).toHaveLength(5);
+    expect(records.filter((r) => r.type === "tool_finished")).toHaveLength(5);
   } finally {
     await fixture.close();
   }

@@ -63,7 +63,7 @@ it.skipIf(!live)(
       expect(sawImage).toBe(true);
       expect(issuedCorrectInput).toBe(true);
       expect(completedInput).toBe(true);
-      expect(result.status).toBe("awaiting_artifact_design");
+      expect(result.status).toBe("goal_achieved");
     } finally {
       await fixture.close();
     }

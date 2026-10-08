@@ -375,7 +375,7 @@ async function main() {
     kind: preflight ? "scripted UI preflight; no model" : "live model test",
     model: preflight ? "scripted" : modelSlug,
     passed:
-      result.status === "awaiting_artifact_design" &&
+      result.status === "goal_achieved" &&
       answerMatches &&
       Object.values(uiChecks).every(Boolean),
     runtimeStatus: result.status,

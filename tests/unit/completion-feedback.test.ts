@@ -7,27 +7,6 @@ import type { DiscoveryContext } from "../../src/runtime/discovery-context.js";
 import { makeFakeAdapter } from "../helpers/fake-adapter.js";
 import { readFileSync } from "node:fs";
 
-const definition = JSON.parse(
-  readFileSync(
-    new URL("../fixtures/replay-member-desk/artifact.json", import.meta.url),
-    "utf8",
-  ),
-);
-const proposal = () => ({
-  proposal_version: 1,
-  capability_selection: {
-    mode: "new",
-    name: "Member status",
-    description: "Read status",
-    reason: "No catalog operation",
-    input_schema: structuredClone(definition.input_schema),
-    output_schema: structuredClone(definition.output_schema),
-  },
-  parameter_values: { email: "demo@example.test" },
-  observed_outputs: { status: "Active" },
-  definition: structuredClone(definition),
-  reference_assets: [],
-});
 const discovery = (): DiscoveryContext => ({
   deployment: {
     app_deployment_id: "test",
@@ -67,40 +46,33 @@ it("returns schema paths for invalid tool arguments without echoing input values
   expect(adapter.calls).toHaveLength(0);
 });
 
-it.each(["missing", "schema", "stale"] as const)(
-  "audits %s discovery proposal rejection and returns repair feedback to the next model turn",
-  async (kind) => {
+it.each([undefined, null, [], "string"])(
+  "audits invalid completion outputs and sends field feedback",
+  async (outputs) => {
     const adapter = makeFakeAdapter(),
       records: AuditRecord[] = [];
-    const p = proposal();
-    if (kind === "schema")
-      delete p.capability_selection.input_schema.additionalProperties;
-    if (kind === "stale") p.definition.steps[0].arguments.control_ref = "c23";
-    let turn = 0;
-    let nextHistory: InternalMessage[] = [];
-    await runTask(
+    let turn = 0,
+      nextHistory: InternalMessage[] = [];
+    const result = await runTask(
       { goal: "Inspect", targetUrl: "https://example.org/app" },
       {
         adapterFactory: { createForTask: async () => adapter },
         model: {
           model: "scripted",
-          complete: async (history: InternalMessage[]) => {
-            const id = `c${++turn}`;
-            if (turn === 2) nextHistory = history;
-            const args =
-              turn === 1
-                ? {
-                    observation_id: "obs_1",
-                    outcome: "goal_achieved",
-                    summary: "SENTINEL_SECRET",
-                    ...(kind === "missing" ? {} : { proposal: p }),
-                  }
-                : { mode: "both" };
+          complete: async (history) => {
+            if (++turn === 2) nextHistory = history;
             const calls = [
               {
-                id,
-                name: turn === 1 ? "finish_task" : "observe_ui",
-                argumentsJson: JSON.stringify(args),
+                id: `c${turn}`,
+                name: "finish_task",
+                argumentsJson: JSON.stringify({
+                  outcome: "goal_achieved",
+                  summary: "Done",
+                  outputs: turn === 1 ? outputs : {},
+                  proposal: "malformed",
+                  observation_id: "stale",
+                  target: { kind: "garbage" },
+                }),
               },
             ];
             return {
@@ -126,36 +98,74 @@ it.each(["missing", "schema", "stale"] as const)(
     const response = nextHistory.find(
       (m) => m.role === "tool" && m.tool_call_id === "c1",
     );
-    expect(response?.role).toBe("tool");
-    if (response?.role !== "tool") throw Error("Missing result");
-    const result = JSON.parse(response.content);
-    expect(result.code).toBe(
-      kind === "schema" ? "INVALID_TOOL_CALL" : "DURABLE_PROPOSAL_INVALID",
-    );
-    expect(result.message).toContain(
-      kind === "schema"
-        ? "proposal.capability_selection.input_schema.additionalProperties"
-        : kind === "missing"
-          ? "proposal"
-          : "STALE_ARTIFACT_FIELD",
-    );
-    expect(result.message).toMatch(/repair|correct|replace|supply/i);
-    const audited = records.find(
-      (r) => r.type === "tool_finished" && r.call.id === "c1",
-    );
-    expect(audited).toMatchObject({ result });
+    if (response?.role !== "tool") throw Error("Missing tool result");
+    expect(JSON.parse(response.content)).toMatchObject({
+      code: "INVALID_TOOL_CALL",
+      message: expect.stringContaining("outputs"),
+    });
     expect(
-      records.filter((r) => r.type === "tool_started").map((r) => r.call.id),
-    ).toEqual(["bootstrap", "c1", "c2"]);
-    const finished = records.filter((r) => r.type === "tool_finished");
-    expect(finished.map((r) => r.call.id)).toEqual(["bootstrap", "c1", "c2"]);
-    expect(JSON.stringify(finished[1]?.result)).not.toContain(
-      "SENTINEL_SECRET",
-    );
+      records.find((r) => r.type === "tool_finished" && r.call.id === "c1"),
+    ).toMatchObject({ result: { code: "INVALID_TOOL_CALL" } });
+    expect(result.status).toBe("goal_achieved");
+    expect(turn).toBe(2);
   },
 );
 
-it("stops before another action when persisting a completion rejection fails", async () => {
+it("builds the artifact after accepted completion is audited, without another capture or model turn", async () => {
+  const adapter = makeFakeAdapter(),
+    c = discovery();
+  let turns = 0;
+  const result = await runTask(
+    { goal: "Inspect", targetUrl: "https://example.org/app" },
+    {
+      adapterFactory: { createForTask: async () => adapter },
+      contract: { validateOutputs: () => false },
+      model: {
+        model: "scripted",
+        complete: async () => {
+          turns++;
+          const calls = [
+            {
+              id: "finish",
+              name: "finish_task",
+              argumentsJson: JSON.stringify({
+                outcome: "goal_achieved",
+                summary: "Done",
+                outputs: { nested: [null, { x: 2 }] },
+                proposal: "malformed",
+                observation_id: "stale",
+              }),
+            },
+          ];
+          return {
+            kind: "tool_calls",
+            calls,
+            assistantMessage: {
+              role: "assistant",
+              content: null,
+              tool_calls: calls,
+            },
+          };
+        },
+      },
+    },
+    {
+      discovery: c,
+      onAudit: async (record) => {
+        if (record.type === "tool_finished" && record.call.id === "finish") {
+          expect(record.result.status).toBe("accepted");
+          expect(c.artifact).toBeUndefined();
+        }
+      },
+    },
+  );
+  expect(result.status).toBe("goal_achieved");
+  expect(turns).toBe(1);
+  expect(c.artifact?.observed_outputs).toEqual(result.outputs);
+  expect(adapter.calls.map((x) => x.name)).toEqual(["navigate"]);
+});
+
+it("stops before another action when persisting an accepted completion fails", async () => {
   const adapter = makeFakeAdapter();
   let models = 0;
   const result = await runTask(
@@ -174,6 +184,7 @@ it("stops before another action when persisting a completion rejection fails", a
                 observation_id: "obs_1",
                 outcome: "goal_achieved",
                 summary: "Done",
+                outputs: {},
               }),
             },
           ];
@@ -201,3 +212,52 @@ it("stops before another action when persisting a completion rejection fails", a
   expect(models).toBe(1);
   expect(adapter.calls.map((c) => c.name)).toEqual(["navigate"]);
 });
+
+it.each(["null", "{invalid"])(
+  "keeps rejected %s arguments out of the artifact action sequence",
+  async (bad) => {
+    const c = discovery(),
+      adapter = makeFakeAdapter();
+    let turns = 0;
+    const result = await runTask(
+      { goal: "Inspect", targetUrl: "https://example.org/app" },
+      {
+        adapterFactory: { createForTask: async () => adapter },
+        model: {
+          model: "scripted",
+          complete: async () => {
+            const first = ++turns === 1;
+            const calls = [
+              {
+                id: `c${turns}`,
+                name: first ? "observe_ui" : "finish_task",
+                argumentsJson: first
+                  ? bad
+                  : JSON.stringify({
+                      outcome: "goal_achieved",
+                      summary: "Done",
+                      outputs: {},
+                    }),
+              },
+            ];
+            return {
+              kind: "tool_calls",
+              calls,
+              assistantMessage: {
+                role: "assistant",
+                content: null,
+                tool_calls: calls,
+              },
+            };
+          },
+        },
+      },
+      { discovery: c },
+    );
+    expect(result.status).toBe("goal_achieved");
+    expect(c.records.map((r) => r.call_id)).toEqual(["bootstrap"]);
+    expect(c.artifact?.definition.steps.map((s) => s.tool)).toEqual([
+      "navigate",
+    ]);
+  },
+);

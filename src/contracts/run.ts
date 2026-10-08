@@ -56,7 +56,7 @@ export type AgentTurn = z.infer<typeof agentTurnSchema>;
 export const runStatusSchema = z.enum([
   "max_tool_calls_reached",
   "needs_intervention",
-  "awaiting_artifact_design",
+  "goal_achieved",
   "business_outcome",
   "unable_to_complete",
   "agent_stopped_unverified",
@@ -70,7 +70,7 @@ export const runResultSchema = z.strictObject({
   model: z.string(),
   toolCallsUsed: z.number().int().nonnegative(),
   proposedOutcome: finishTaskInput.optional(),
-  outputs: z.record(z.string(), z.unknown()).optional(),
+  outputs: finishTaskInput.shape.outputs,
   error: z.strictObject({ code: z.string(), message: z.string() }).optional(),
 });
 export type RunResult = z.infer<typeof runResultSchema>;

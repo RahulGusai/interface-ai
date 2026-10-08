@@ -2,6 +2,7 @@ import copy
 import hashlib
 import json
 import re
+from urllib.parse import urlsplit
 
 from jsonschema import Draft202012Validator, FormatChecker
 
@@ -76,6 +77,8 @@ def validate_schema(schema):
     ):
         raise ValueError("SCHEMA_UNSUPPORTED")
     for name, field in props.items():
+        if field == {}:
+            continue
         if (
             not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", name)
             or not isinstance(field, dict)
@@ -134,12 +137,12 @@ def validate_definition(definition):
     available_after = {}
 
     def walk(value, allowed):
-        if isinstance(value, str) and re.match(r"https?://", value, re.I):
-            raise ValueError("Tenant URL literal forbidden")
         if isinstance(value, list):
             for item in value:
                 walk(item, allowed)
         elif isinstance(value, dict):
+            if value.get("kind") == "literal":
+                return
             if set(value) & FORBIDDEN:
                 raise ValueError("Transient identifiers/recorded coordinates forbidden")
             kind = value.get("kind")
@@ -156,12 +159,6 @@ def validate_definition(definition):
                 or value["path"].startswith("//")
             ):
                 raise ValueError("Invalid relative URL")
-            if (
-                kind == "literal"
-                and isinstance(value.get("value"), str)
-                and re.match(r"https?://", value["value"], re.IGNORECASE)
-            ):
-                raise ValueError("Tenant URL literal forbidden")
             if value.get("check_id"):
                 if value["check_id"] in checks:
                     raise ValueError("Duplicate check")
@@ -176,11 +173,18 @@ def validate_definition(definition):
     walk(definition["entry"], seen)
 
     def step(s):
-        if s["tool"] == "navigate" and (
-            not isinstance(s["arguments"].get("url"), dict)
-            or s["arguments"]["url"].get("kind") not in ("environment", "url")
-        ):
-            raise ValueError("Untrusted navigation URL")
+        if s["tool"] == "navigate":
+            url = s["arguments"].get("url")
+            valid = isinstance(url, dict) and url.get("kind") in ("environment", "url")
+            if (
+                isinstance(url, dict)
+                and url.get("kind") == "literal"
+                and isinstance(url.get("value"), str)
+            ):
+                parsed = urlsplit(url["value"])
+                valid = parsed.scheme in ("http", "https") and bool(parsed.hostname)
+            if not valid:
+                raise ValueError("Untrusted navigation URL")
         if s["step_id"] in seen:
             raise ValueError("Duplicate step")
         walk(s["arguments"], seen)
@@ -202,7 +206,8 @@ def validate_definition(definition):
                 walk(recovery["then_checks"], seen)
         available_after[s["step_id"]] = set(seen)
     walk(definition["success_checks"], seen)
-    walk(definition["output_mapping"], seen)
+    for value in definition["output_mapping"].values():
+        walk(value, seen)
     if set(definition["output_mapping"]) != set(
         definition["output_schema"]["properties"]
     ):

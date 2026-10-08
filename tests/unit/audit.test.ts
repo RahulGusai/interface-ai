@@ -17,7 +17,7 @@ it("audits exact input strings, bootstrap, rejected calls and unexecuted batch t
       id: "end",
       name: "finish_task",
       argumentsJson:
-        '{"observation_id":"obs_1","outcome":"goal_achieved","summary":"done"}',
+        '{"observation_id":"obs_1","outcome":"goal_achieved","summary":"done","outputs":{}}',
     },
     { id: "tail", name: "observe_ui", argumentsJson: '{"mode":"both"}' },
   ];

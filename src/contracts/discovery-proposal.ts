@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { artifactSchema, flatSchema } from "./artifact.js";
+import { artifactSchema, valueSchema } from "./artifact.js";
 export const capabilitySelection = z.discriminatedUnion("mode", [
   z.strictObject({
     mode: z.literal("reuse"),
@@ -11,8 +11,8 @@ export const capabilitySelection = z.discriminatedUnion("mode", [
     name: z.string().min(1),
     description: z.string().min(1),
     reason: z.string().min(1),
-    input_schema: flatSchema,
-    output_schema: flatSchema,
+    input_schema: valueSchema,
+    output_schema: valueSchema,
   }),
 ]);
 export const discoveryProposal = z.strictObject({

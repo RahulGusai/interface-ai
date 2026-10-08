@@ -43,17 +43,19 @@ Copy its deployment UUID into the discovery request. Generate a request key with
 
 POST it to `/v1/runs` with `Content-Type: application/json` and the key header. Poll the returned run ID and `/v1/runs/{id}/events?after_sequence=0`. Follow `next_after_sequence` until `has_more=false`, even when a type-filtered page has no items.
 
-A narrative completion cannot publish. Successful discovery prepares a frozen draft, executes a linked replay with `purpose=validation`, and atomically publishes a capability/artifact and the pair's first ready binding. Failed validation remains inspectable. Subsequent artifact versions leave an existing binding unchanged. Point actions require explicit pre-action reference bounds; unrecorded screen coordinates cannot become an artifact.
+`finish_task` reports an outcome and a meaningful summary; `goal_achieved` also requires an `outputs` object (which may be empty). It does not require a proposal or observation ID, and output values are not checked for correctness during acceptance. After acceptance, the runtime builds one artifact step per recorded action, using its attached durable target metadata. The backend stores the frozen draft, links it to the run, and completes discovery after persistence succeeds.
+
+The draft represents the exact recorded run; arguments are not automatically parameterized. Outputs matching a named extraction bind to that recorded field; other reported outputs are retained as literal JSON values. Separate explicit validation replays the draft before capability publication and creation of the pair's first ready binding. Subsequent artifact versions leave an existing binding unchanged. Point actions require explicit pre-action reference bounds so the target recorder can preserve a visual target.
 
 ## Replay and lifecycle
 
 After publication, use the exact artifact UUID:
 
 ```json
-{"kind":"replay","app_deployment_id":"<deployment UUID>","artifact_id":"<published artifact UUID>","inputs":{"email":"other@example.test"}}
+{"kind":"replay","app_deployment_id":"<deployment UUID>","artifact_id":"<published artifact UUID>","inputs":{}}
 ```
 
-POST `/v1/runs` with a new request key. The fixture should return `status=Pending`; `missing@example.test` yields the declared expected `not_found` outcome. Inputs are validated before admission. `/v1/capabilities/{id}/invoke` selects the current ready binding and freezes its artifact/version/configuration on admission.
+POST `/v1/runs` with a new request key and the inputs declared by that artifact. Runtime-built drafts replay their recorded argument values. Inputs are validated before admission. `/v1/capabilities/{id}/invoke` selects the current ready binding and freezes its artifact/version/configuration on admission.
 
 PATCH deployment config using `expected_config_version`. Revalidate an unchanged artifact through `/v1/artifacts/{id}/validate` with `{app_deployment_id,inputs}` and a request key. Explicit activation uses `/v1/app-deployments/{id}/bindings/{capability_id}/activate` with artifact/validation UUIDs and `expected_binding_version`. Validation and activation are limited to the artifact's source deployment; other deployments are not provisioned as candidates.
 

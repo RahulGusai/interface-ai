@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { objectRecord } from "./object-record.js";
 export const primitive = z.union([
   z.string(),
   z.number().finite(),
@@ -23,15 +24,24 @@ export const flatSchema = z.strictObject({
   required: z.array(z.string()),
   additionalProperties: z.literal(false),
 });
+// Runtime-built artifacts preserve arbitrary JSON output values without imposing
+// field types or names on finish_task. Typed capability contracts remain supported.
+export const jsonObjectSchema = z.strictObject({
+  type: z.literal("object"),
+  properties: objectRecord(z.strictObject({})),
+  required: z.array(z.string()),
+  additionalProperties: z.literal(false),
+});
+export const valueSchema = z.union([flatSchema, jsonObjectSchema]);
 export type FlatSchema = z.infer<typeof flatSchema>;
 export function validateValues(
   raw: unknown,
   value: unknown,
-): Record<string, string | number | boolean> {
-  const schema = flatSchema.parse(raw);
+): Record<string, unknown> {
+  const schema = valueSchema.parse(raw);
   if (!value || typeof value !== "object" || Array.isArray(value))
     throw Error("INPUT_CONTRACT_INVALID");
-  const result = { ...value } as Record<string, string | number | boolean>;
+  const result = { ...value } as Record<string, unknown>;
   if (
     schema.required.some((k) => !(k in schema.properties)) ||
     new Set(schema.required).size !== schema.required.length
@@ -41,6 +51,12 @@ export function validateValues(
     if (!Object.hasOwn(schema.properties, key))
       throw Error("INPUT_CONTRACT_INVALID");
   for (const [key, p] of Object.entries(schema.properties)) {
+    if (!("type" in p)) {
+      if (Object.hasOwn(result, key)) z.json().parse(result[key]);
+      else if (schema.required.includes(key))
+        throw Error("INPUT_CONTRACT_INVALID");
+      continue;
+    }
     if (!Object.hasOwn(result, key) && p.default !== undefined)
       result[key] = p.default;
     const v = result[key];
@@ -51,7 +67,7 @@ export function validateValues(
     if (
       typeof v !== p.type ||
       (typeof v === "number" && !Number.isFinite(v)) ||
-      (p.enum && !p.enum.includes(v)) ||
+      (p.enum && !p.enum.includes(v as string | number | boolean)) ||
       (p.format === "email" &&
         (typeof v !== "string" || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v))) ||
       (typeof v === "number" &&
@@ -64,7 +80,10 @@ export function validateValues(
 }
 export const binding: z.ZodType<any> = z.lazy(() =>
   z.discriminatedUnion("kind", [
-    z.strictObject({ kind: z.literal("literal"), value: z.json() }),
+    z.strictObject({
+      kind: z.literal("literal"),
+      value: z.custom((value) => z.json().safeParse(value).success),
+    }),
     z.strictObject({ kind: z.literal("input"), path: z.string() }),
     z.strictObject({
       kind: z.literal("step_output"),
@@ -217,8 +236,8 @@ export const artifactSchema = z.strictObject({
     ui_variant: z.string().min(1),
     vendor_release: z.string().nullable(),
   }),
-  input_schema: flatSchema,
-  output_schema: flatSchema,
+  input_schema: valueSchema,
+  output_schema: valueSchema,
   entry: z.strictObject({ url: binding, checks: z.array(check) }),
   steps: z
     .array(
@@ -235,10 +254,10 @@ export const artifactSchema = z.strictObject({
       message: z.string(),
       after_step_id: z.string(),
       checks: z.array(check).min(1),
-      output_mapping: z.record(z.string(), binding),
+      output_mapping: objectRecord(binding),
     }),
   ),
-  output_mapping: z.record(z.string(), binding),
+  output_mapping: objectRecord(binding),
 });
 export type ArtifactDefinition = z.infer<typeof artifactSchema>;
 export function parseArtifact(raw: unknown): ArtifactDefinition {
@@ -251,9 +270,8 @@ export function parseArtifact(raw: unknown): ArtifactDefinition {
       for (const x of v) walk(x, available);
       return;
     }
-    if (typeof v === "string" && /^https?:\/\//i.test(v))
-      throw Error("ABSOLUTE_URL");
     if (!v || typeof v !== "object") return;
+    if (v.kind === "literal") return;
     for (const k of Object.keys(v))
       if (
         [
@@ -271,12 +289,6 @@ export function parseArtifact(raw: unknown): ArtifactDefinition {
       throw Error("UNDECLARED_INPUT");
     if (v.kind === "step_output" && !available.has(v.step_id))
       throw Error("FORWARD_STEP_OUTPUT");
-    if (
-      v.kind === "literal" &&
-      typeof v.value === "string" &&
-      /^https?:\/\//i.test(v.value)
-    )
-      throw Error("ABSOLUTE_URL");
     if (v.check_id) {
       if (checks.has(v.check_id)) throw Error("DUPLICATE_CHECK");
       checks.add(v.check_id);
@@ -291,7 +303,13 @@ export function parseArtifact(raw: unknown): ArtifactDefinition {
     if (
       s.tool === "navigate" &&
       (!s.arguments.url ||
-        !["environment", "url"].includes(s.arguments.url.kind))
+        !(
+          ["environment", "url"].includes(s.arguments.url.kind) ||
+          (s.arguments.url.kind === "literal" &&
+            typeof s.arguments.url.value === "string" &&
+            /^https?:\/\//i.test(s.arguments.url.value) &&
+            z.url().safeParse(s.arguments.url.value).success)
+        ))
     )
       throw Error("UNTRUSTED_NAVIGATION");
   };
@@ -324,7 +342,7 @@ export function parseArtifact(raw: unknown): ArtifactDefinition {
     availableAfter.set(s.step_id, new Set(seen));
   }
   walk(a.success_checks, seen);
-  walk(a.output_mapping, seen);
+  for (const value of Object.values(a.output_mapping)) walk(value, seen);
   for (const b of a.business_outcomes) {
     const available = availableAfter.get(b.after_step_id);
     if (!available) throw Error("UNKNOWN_BUSINESS_STEP");
@@ -338,7 +356,7 @@ export function parseArtifact(raw: unknown): ArtifactDefinition {
   // Validate schema defaults even when required values are not yet supplied.
   for (const schema of [a.input_schema, a.output_schema])
     for (const [k, p] of Object.entries(schema.properties))
-      if (p.default !== undefined)
+      if ("default" in p && p.default !== undefined)
         validateValues({ ...schema, required: [] }, { [k]: p.default });
   return a;
 }

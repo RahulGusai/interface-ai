@@ -1,3 +1,4 @@
+import { runReplay } from "../../src/replay/run-replay.js";
 import { it, expect } from "vitest";
 import { readFile } from "node:fs/promises";
 import { runTask } from "../../src/runtime/run-task.js";
@@ -7,17 +8,11 @@ import { startFixture } from "../helpers/fixture-server.js";
 import { lastObservation } from "../../src/demo/scripted-model.js";
 import type { ModelClient } from "../../src/llm/model-client.js";
 import type { DiscoveryContext } from "../../src/runtime/discovery-context.js";
-const definition = JSON.parse(
-  await readFile(
-    new URL("../fixtures/replay-member-desk/artifact.json", import.meta.url),
-    "utf8",
-  ),
-);
 const html = await readFile(
   new URL("../fixtures/replay-member-desk/index.html", import.meta.url),
   "utf8",
 );
-it("accepts a parameterized observed plan and keeps inline observation bytes", async () => {
+it("builds an artifact without a model proposal and keeps inline observation bytes", async () => {
   const fixture = await startFixture(undefined, html);
   try {
     let step = 0,
@@ -85,21 +80,6 @@ it("accepts a parameterized observed plan and keeps inline observation bytes", a
               outcome: "goal_achieved",
               summary: "Status read",
               outputs: { status: "Active" },
-              proposal: {
-                proposal_version: 1,
-                capability_selection: {
-                  mode: "new",
-                  name: "Member status",
-                  description: "Search and read member status",
-                  reason: "No catalog operation",
-                  input_schema: definition.input_schema,
-                  output_schema: definition.output_schema,
-                },
-                parameter_values: { email: "demo@example.test" },
-                observed_outputs: { status: "Active" },
-                definition,
-                reference_assets: [],
-              },
             };
         }
         const calls = [
@@ -126,7 +106,7 @@ it("accepts a parameterized observed plan and keeps inline observation bytes", a
         config_version: 1,
       },
       capability_catalog: [],
-      inputs: {},
+      inputs: { email: "demo@example.test" },
       records: [],
       references: [],
     };
@@ -142,12 +122,34 @@ it("accepts a parameterized observed plan and keeps inline observation bytes", a
       },
       { discovery },
     );
-    expect(result.status).toBe("awaiting_artifact_design");
-    expect(discovery.proposal?.parameter_values).toEqual({
+    expect(result.status).toBe("goal_achieved");
+    expect(discovery.artifact?.parameter_values).toEqual({
       email: "demo@example.test",
     });
+    expect(discovery.artifact?.definition.steps.map((s) => s.tool)).toEqual([
+      "navigate",
+      "type_text",
+      "click",
+      "click",
+      "extract_data",
+    ]);
+    const replay = await runReplay(
+      {
+        artifact: { definition: discovery.artifact!.definition } as any,
+        inputs: discovery.artifact!.parameter_values,
+        deployment: discovery.deployment,
+        assets: [],
+        staging_directory: "/tmp",
+      },
+      { adapterFactory: createBrowserFactory({ headless: true }) },
+      { onAudit: async () => {} },
+    );
+    expect(replay).toMatchObject({
+      status: "success",
+      outputs: { status: "Active" },
+    });
     expect(images).toBeGreaterThan(0);
-    expect(JSON.stringify(discovery.proposal?.definition)).not.toContain(
+    expect(JSON.stringify(discovery.artifact?.definition)).not.toContain(
       "control_ref",
     );
   } finally {

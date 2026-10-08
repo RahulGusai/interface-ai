@@ -20,7 +20,7 @@ try {
     },
   );
   console.log(JSON.stringify(result));
-  if (result.status !== "awaiting_artifact_design") process.exitCode = 1;
+  if (result.status !== "goal_achieved") process.exitCode = 1;
 } finally {
   await fixture.close();
 }

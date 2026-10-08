@@ -1,4 +1,5 @@
-import { verifyProposal, type DiscoveryContext } from "./discovery-context.js";
+import type { DiscoveryContext } from "./discovery-context.js";
+import { buildArtifact } from "./artifact-builder.js";
 import { recordDurableTarget, recordingHint } from "./target-recorder.js";
 import type { Capture } from "../contracts/observation.js";
 import { SafeError } from "../contracts/errors.js";
@@ -15,10 +16,7 @@ import type { ModelClient } from "../llm/model-client.js";
 import type { TaskContract } from "./finalization.js";
 import { parseTaskInput, maxToolCalls } from "./config.js";
 import { ConversationHistory } from "./history.js";
-import {
-  toolValidationMessage,
-  proposalValidationMessage,
-} from "./validation-feedback.js";
+import { toolValidationMessage } from "./validation-feedback.js";
 import { buildInitialMessages, DISCOVERY_PROMPT } from "./prompts.js";
 import type { AuditSink } from "./audit.js";
 import { dispatchTool, type DispatchContext } from "./dispatch.js";
@@ -99,11 +97,14 @@ export async function runTask(
     } catch {
       parsed = null;
     }
-    if (options.discovery && parsed && typeof parsed === "object") {
-      hint = parsed.recording_hint;
-      delete parsed.recording_hint;
+    if (options.discovery) {
+      if (parsed && typeof parsed === "object") {
+        hint = parsed.recording_hint;
+        delete parsed.recording_hint;
+      }
       try {
         const action = parseToolAction(call.name, parsed);
+        if (action.name === "finish_task") parsed = action.input;
         if (
           "observation_id" in action.input &&
           (!context!.adapter.isCurrentObservation(
@@ -130,41 +131,6 @@ export async function runTask(
             message: toolValidationMessage(error),
           },
         };
-      }
-      if (
-        !preflight &&
-        call.name === "finish_task" &&
-        parsed.outcome === "goal_achieved"
-      ) {
-        try {
-          if (!parsed.proposal) throw Error("DURABLE_PLAN_REQUIRED");
-          const fresh = await context!.adapter.capture("both");
-          options.discovery.proposal = verifyProposal(
-            parsed.proposal,
-            options.discovery,
-            fresh,
-          );
-          contract.validateOutputs = (outputs) => {
-            try {
-              return (
-                JSON.stringify(outputs) ===
-                JSON.stringify(options.discovery!.proposal!.observed_outputs)
-              );
-            } catch {
-              return false;
-            }
-          };
-          if (fresh.observation.status !== "ok") throw Error("CAPTURE_FAILED");
-          parsed.observation_id = fresh.observation.observation_id;
-        } catch (error) {
-          preflight = {
-            result: {
-              status: "rejected",
-              code: "DURABLE_PROPOSAL_INVALID",
-              message: proposalValidationMessage(error),
-            },
-          };
-        }
       }
       if (!preflight && parsed.target) {
         if (
@@ -213,6 +179,7 @@ export async function runTask(
       ...({
         proposed_input: parsed ? JSON.parse(call.argumentsJson) : null,
         durable_target: recordedTarget,
+        durable_fields: parsed?._durable_fields,
       } as any),
     });
     const started = performance.now();
@@ -229,7 +196,6 @@ export async function runTask(
     if (
       options.discovery &&
       !preflight &&
-      source === "model" &&
       !["finish_task", "request_human"].includes(call.name)
     )
       options.discovery.records.push({
@@ -459,21 +425,34 @@ export async function runTask(
           );
         if (
           call.name === "finish_task" &&
-          (response.result.status === "accepted" ||
-            (response.result.status === "rejected" &&
-              response.result.code === "ARTIFACT_INTEGRATION_REQUIRED"))
+          response.result.status === "accepted"
         ) {
           const proposed = finishTaskInput.parse(
             JSON.parse(call.argumentsJson),
           );
+          if (proposed.outcome === "goal_achieved" && options.discovery) {
+            try {
+              options.discovery.artifact = buildArtifact(
+                options.discovery,
+                input.goal,
+                proposed.outputs!,
+              );
+            } catch {
+              return await stop(
+                result("tool_error", "Runtime artifact construction failed", {
+                  error: {
+                    code: "ARTIFACT_BUILD_FAILED",
+                    message: "Runtime artifact construction failed",
+                  },
+                }),
+              );
+            }
+          }
           return await stop(
-            result(
-              proposed.outcome === "goal_achieved"
-                ? "awaiting_artifact_design"
-                : proposed.outcome,
-              proposed.summary,
-              { proposedOutcome: proposed, outputs: proposed.outputs },
-            ),
+            result(proposed.outcome, proposed.summary, {
+              proposedOutcome: proposed,
+              outputs: proposed.outputs,
+            }),
           );
         }
       }

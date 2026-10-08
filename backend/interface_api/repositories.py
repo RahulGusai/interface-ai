@@ -252,6 +252,7 @@ class Repository:
                 "interrupted",
             },
             "awaiting_finalization": {
+                "completed",
                 "validating",
                 "failed",
                 "cancelling",
@@ -259,6 +260,7 @@ class Repository:
             },
             "validating": {"completed", "failed", "cancelling", "interrupted"},
             "cancelling": {"cancelled", "interrupted"},
+            "completed": {"validating"},
             "failed": {"validating"},
             "interrupted": {"validating"},
         }

@@ -72,7 +72,7 @@ class Lifecycle:
             run = await asyncio.to_thread(self.repo.get, "runs", "run_id", ident)
             runtime = message["runtime_result"]
             if run["kind"] == "discovery":
-                if runtime["status"] == "awaiting_artifact_design":
+                if runtime["status"] == "goal_achieved":
                     await asyncio.to_thread(
                         self.repo.transition,
                         ident,
@@ -81,17 +81,11 @@ class Lifecycle:
                         runtime,
                     )
                     draft = await self.prepare_draft(
-                        ident, message.get("discovery_proposal")
+                        ident, message.get("discovery_artifact")
                     )
-                    validation = await asyncio.to_thread(
-                        self.start_validation,
-                        draft["artifact_id"],
-                        run["inputs"],
-                        None,
-                        None,
-                        True,
+                    await asyncio.to_thread(
+                        self.complete_discovery, ident, draft, runtime
                     )
-                    await self.execute(validation["run_id"])
                 elif runtime["status"] == "business_outcome":
                     await asyncio.to_thread(
                         self.repo.transition,
@@ -113,10 +107,11 @@ class Lifecycle:
                     code = (
                         "RUNTIME_STOPPED_REQUIRES_HUMAN"
                         if runtime["status"] == "needs_intervention"
-                        else runtime.get("error", {}).get(
-                            "code", "PROVIDER_ERROR"
-                        )
+                        else runtime.get("error", {}).get("code", "PROVIDER_ERROR")
                         if runtime["status"] == "provider_error"
+                        else "ARTIFACT_BUILD_FAILED"
+                        if runtime.get("error", {}).get("code")
+                        == "ARTIFACT_BUILD_FAILED"
                         else runtime["status"].upper()
                     )
                     await asyncio.to_thread(
@@ -128,7 +123,9 @@ class Lifecycle:
                                 "hard_failure",
                                 code,
                                 runtime["summary"],
-                                stage="execution",
+                                stage="finalization"
+                                if code == "ARTIFACT_BUILD_FAILED"
+                                else "execution",
                                 dispatch="uncertain",
                             )
                         },
@@ -219,6 +216,34 @@ class Lifecycle:
                     self.worker.settings.database_path.parent / "staging" / ident,
                     ignore_errors=True,
                 )
+
+    def complete_discovery(self, source_id, draft, runtime):
+        # Completion and the persisted artifact link are committed together.
+        with self.repo.db.transaction() as c:
+            artifact = self.repo.get(
+                "artifacts", "artifact_id", draft["artifact_id"], c
+            )
+            if artifact["source_run_id"] != source_id:
+                raise ValueError("Artifact source mismatch")
+            c.execute(
+                "UPDATE runs SET finalized_artifact_id=? WHERE run_id=?",
+                (artifact["artifact_id"], source_id),
+            )
+            self.repo.transition(
+                source_id,
+                "completed",
+                {
+                    "outcome": outcome(
+                        "success",
+                        "GOAL_ACHIEVED",
+                        runtime["summary"],
+                        runtime.get("outputs"),
+                    ),
+                    "artifact_id": artifact["artifact_id"],
+                },
+                runtime,
+                c,
+            )
 
     async def prepare_draft(self, source_id, proposal):
         source = self.repo.get("runs", "run_id", source_id)
@@ -339,6 +364,8 @@ class Lifecycle:
                 for v in value:
                     normalize(v)
             elif isinstance(value, dict):
+                if value.get("kind") == "literal":
+                    return
                 if value.get("kind") == "visual":
                     handle = value["asset_id"]
                     ref = next(
@@ -396,7 +423,7 @@ class Lifecycle:
                     "artifact_id": artifact_id,
                     "definition_sha256": digest(definition),
                     "observed_outputs": outputs,
-                    "goal_verified": True,
+                    "goal_reported": True,
                 },
                 conn=c,
             )
@@ -437,6 +464,7 @@ class Lifecycle:
         if artifact["state"] != "published":
             if source["status"] not in (
                 "awaiting_finalization",
+                "completed",
                 "failed",
                 "interrupted",
             ):

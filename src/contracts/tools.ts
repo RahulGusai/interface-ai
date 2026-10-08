@@ -146,7 +146,7 @@ const descriptions: Record<ToolName, string> = {
   request_human:
     "Stop autonomous work and report intervention request; takeover is deferred.",
   finish_task:
-    "Propose terminal outcome. Discovery goal_achieved requires a complete valid proposal with observed durable steps, passing success checks, and output bindings. outputs must equal proposal.observed_outputs. After rejection, repair the reported fields and resubmit the proposal; a summary and outputs alone are insufficient.",
+    "Report the terminal outcome and a meaningful summary. For goal_achieved, outputs must be an object (use {} if empty). No observation_id or proposal is needed; the runtime builds the artifact from recorded actions. Correct only invalid required fields after rejection.",
 };
 export const toolDefinitions = Object.entries(toolSchemas).map(
   ([name, schema]) => ({
@@ -154,7 +154,22 @@ export const toolDefinitions = Object.entries(toolSchemas).map(
     function: {
       name,
       description: descriptions[name as ToolName],
-      parameters: z.toJSONSchema(schema, { unrepresentable: "any" }),
+      parameters: {
+        ...z.toJSONSchema(schema, { unrepresentable: "any", io: "input" }),
+        ...(name === "finish_task"
+          ? {
+              allOf: [
+                {
+                  if: {
+                    properties: { outcome: { const: "goal_achieved" } },
+                    required: ["outcome"],
+                  },
+                  then: { required: ["outputs"] },
+                },
+              ],
+            }
+          : {}),
+      },
     },
   }),
 );
