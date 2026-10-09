@@ -551,6 +551,7 @@ export class BrowserAdapter implements BrowserAdapterPort {
         target!,
         action.input.option.label,
         this.options.actionMs,
+        action.input.option.match,
       );
       return {
         status: r.verification === "matched" ? "completed" : "failed",

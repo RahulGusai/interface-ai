@@ -7,6 +7,7 @@ export type Binding = {
   element: Element;
   control: Control;
   options?: string[];
+  customOptions?: Binding[];
 };
 export type Resolved =
   | { kind: "control"; binding: Binding }

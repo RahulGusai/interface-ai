@@ -66,9 +66,9 @@ export function scriptedModel(): ModelClient {
         () => ({
           name: "finish_task",
           input: {
-            observation_id: o.observation_id,
             outcome: "goal_achieved",
             summary: "Synthetic member found",
+            outputs: { member: "Member Ada | 123.50" },
           },
         }),
       ];

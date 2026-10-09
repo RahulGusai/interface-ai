@@ -75,7 +75,10 @@ export const toolSchemas = {
   select_option: z.strictObject({
     ...obs,
     target: controlTarget,
-    option: z.strictObject({ label: z.string() }),
+    option: z.strictObject({
+      label: z.string(),
+      match: z.enum(["exact", "contains", "ends_with"]).optional(),
+    }),
   }),
   wait_for: conditionInput,
   check_ui: conditionInput,
@@ -136,7 +139,7 @@ const descriptions: Record<ToolName, string> = {
   scroll:
     "Scroll selected region by positive visible-viewport fraction, at most two; no focus change.",
   select_option:
-    "Select exact unique observed label on native single-select; custom widgets unsupported.",
+    "Select a unique observed option scoped to a native select or ARIA combobox/listbox. Target the stable parent, never an option. Open custom dropdowns first. option.match defaults to exact; use contains or ends_with for a bound name within a prefixed label. Missing, ambiguous or disabled matches are blocked.",
   wait_for:
     "Poll a deterministic condition on an observed control under runtime deadline.",
   check_ui:

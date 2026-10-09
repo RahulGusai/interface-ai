@@ -1,6 +1,8 @@
 import type { Page } from "playwright";
 import { SafeError } from "../../contracts/errors.js";
 import type { Resolved, Element } from "./targets.js";
+import { selectionListbox, matchingLabels } from "./selection.js";
+import { readSemantics } from "./capture.js";
 export async function click(page: Page, target: Resolved, timeout: number) {
   if (target.kind === "control")
     await target.binding.element.click({ timeout });
@@ -149,35 +151,155 @@ export async function selectOption(
   target: Resolved,
   label: string,
   timeout: number,
+  match: "exact" | "contains" | "ends_with" = "exact",
 ) {
   if (target.kind !== "control")
     throw new SafeError("UNSUPPORTED", "Control required");
-  const { element, options } = target.binding;
-  if (!options?.includes(label)) {
-    const matches =
-      options?.filter(
-        (option) => option.toLowerCase() === label.toLowerCase(),
-      ) ?? [];
-    if (matches.length !== 1)
-      throw new SafeError(
-        "UNOBSERVED_OPTION",
-        "Option was not observed uniquely",
-      );
-    label = matches[0]!;
-  }
-  const valid = await element.evaluate((e, label) => {
-    if (!(e instanceof HTMLSelectElement) || e.multiple) return false;
-    const matches = Array.from(e.options).filter((o) => o.label === label);
-    return (
-      !e.disabled &&
-      matches.length === 1 &&
-      !matches[0]!.disabled &&
-      !(
-        matches[0]!.parentElement instanceof HTMLOptGroupElement &&
-        matches[0]!.parentElement.disabled
-      )
+  const { element, options, customOptions } = target.binding;
+  const query = label;
+  if (!["combobox", "listbox"].includes(target.binding.control.role))
+    throw new SafeError(
+      "SELECT_TARGET_REQUIRED",
+      "Target the stable combobox or listbox, not an option",
     );
-  }, label);
+  const matches = matchingLabels(
+    options ?? customOptions?.map((o) => o.control.name) ?? [],
+    label,
+    match,
+  );
+  if (matches.length !== 1)
+    throw new SafeError(
+      "UNOBSERVED_OPTION",
+      "Option was not observed uniquely within this dropdown",
+    );
+  const selectedLabel = matches[0]!;
+  if (!options) {
+    const option = customOptions!.find(
+      (o) => o.control.name === selectedLabel,
+    )!;
+    const list = await element.evaluateHandle(selectionListbox);
+    try {
+      if (!list.asElement())
+        throw new SafeError(
+          "UNSUPPORTED_SELECTION",
+          "Dropdown ownership changed",
+        );
+      const supported = await list.evaluate(
+        (e) =>
+          !!e &&
+          e.isConnected &&
+          e.getAttribute("aria-multiselectable") !== "true" &&
+          !e.closest('[aria-disabled="true"]'),
+      );
+      const candidates = (await list
+        .asElement()!
+        .$$('[role="option"]')) as Element[];
+      const fresh: { label: string; visible: boolean; enabled: boolean }[] = [];
+      try {
+        if (supported)
+          for (const candidate of candidates) {
+            if (
+              !(await candidate.evaluate(
+                (e, owner) => e.closest('[role="listbox"]') === owner,
+                list,
+              ))
+            )
+              continue;
+            const semantics = await readSemantics(candidate);
+            if (!semantics) continue;
+            const enabled =
+              semantics.state.enabled !== false &&
+              (await candidate.evaluate(
+                (e) => !e.closest('[aria-disabled="true"]'),
+              ));
+            fresh.push({ label: semantics.name, visible: true, enabled });
+          }
+      } finally {
+        await Promise.all(candidates.map((e) => e.dispose()));
+      }
+      const liveMatches = matchingLabels(
+        fresh.filter((o) => o.visible).map((o) => o.label),
+        label,
+        match,
+      );
+      const valid =
+        liveMatches.length === 1 &&
+        liveMatches[0] === selectedLabel &&
+        fresh.find((o) => o.label === selectedLabel)?.enabled &&
+        (await readSemantics(option.element))?.name === selectedLabel &&
+        (await element.evaluate(
+          (e) =>
+            !e.closest('[aria-disabled="true"]') &&
+            !(e as HTMLInputElement).disabled,
+        )) &&
+        (await option.element.evaluate(
+          (e, owner) =>
+            e.isConnected && e.closest('[role="listbox"]') === owner,
+          list,
+        ));
+      if (!valid)
+        throw new SafeError(
+          "UNSUPPORTED_SELECTION",
+          "Selection is missing, ambiguous, changed or disabled",
+        );
+      await option.element.click({ timeout });
+      // Detached option state cannot verify a selection; read the stable widget
+      // or a currently connected selected option belonging to it.
+      const value = await element.evaluate((e) =>
+        "value" in e
+          ? String((e as HTMLInputElement).value)
+          : e.getAttribute("aria-valuetext"),
+      );
+      let selected = value === selectedLabel;
+      if (!selected) {
+        const currentList = await element.evaluateHandle(selectionListbox);
+        try {
+          selected =
+            !!currentList.asElement() &&
+            (await readSemantics(option.element, false, true))?.name ===
+              selectedLabel &&
+            (await option.element.evaluate(
+              (e, owner) =>
+                e.isConnected &&
+                e.closest('[role="listbox"]') === owner &&
+                e.getAttribute("aria-selected") === "true",
+              currentList,
+            ));
+        } finally {
+          await currentList.dispose();
+        }
+      }
+      return {
+        verification: selected ? "matched" : "mismatched",
+        selected_label: selected ? selectedLabel : undefined,
+      } as const;
+    } finally {
+      await list.dispose();
+    }
+  }
+  label = selectedLabel;
+  const liveLabels = await element.evaluate((e) =>
+    e instanceof HTMLSelectElement
+      ? Array.from(e.options).map((o) => o.label)
+      : [],
+  );
+  const liveMatches = matchingLabels(liveLabels, query, match);
+  const valid =
+    liveMatches.length === 1 &&
+    liveMatches[0] === label &&
+    (await element.evaluate((e, label) => {
+      if (!(e instanceof HTMLSelectElement) || e.multiple) return false;
+      const matches = Array.from(e.options).filter((o) => o.label === label);
+      return (
+        !e.disabled &&
+        matches.length === 1 &&
+        !matches[0]!.disabled &&
+        !(
+          matches[0]!.parentElement instanceof HTMLOptGroupElement &&
+          matches[0]!.parentElement.disabled
+        )
+      );
+    }, label));
   if (!valid)
     throw new SafeError(
       "UNSUPPORTED_SELECTION",

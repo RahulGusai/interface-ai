@@ -192,7 +192,27 @@ export async function runTask(
               };
             if (["click", "type_text"].includes(name))
               properties.row_match = rowSchema;
-            if (name === "select_option")
+            if (name === "select_option") {
+              const selectionRefs =
+                observation?.status === "ok" &&
+                observation.controls.status === "available"
+                  ? observation.controls.items
+                      .filter((c) => ["combobox", "listbox"].includes(c.role))
+                      .map((c) => c.ref)
+                  : [];
+              if (selectionRefs.length)
+                properties.target = {
+                  ...original.target,
+                  properties: {
+                    ...original.target.properties,
+                    control_ref: {
+                      type: "string",
+                      enum: selectionRefs,
+                      description:
+                        "Stable combobox/listbox parent; never an option reference.",
+                    },
+                  },
+                };
               properties.option = {
                 ...original.option,
                 properties: {
@@ -200,6 +220,7 @@ export async function runTask(
                   label: expression,
                 },
               };
+            }
             if (["check_ui", "wait_for"].includes(name))
               properties.condition = {
                 oneOf: original.condition.oneOf.map((variant: any) =>
@@ -352,6 +373,20 @@ export async function runTask(
             parsed.observation_id !== currentCapture.observation.observation_id
           )
             throw Error("REFERENCE_CAPTURE_REQUIRED");
+          if (
+            call.name === "select_option" &&
+            parsed.target.kind === "control" &&
+            currentCapture.observation.controls.status === "available" &&
+            !["combobox", "listbox"].includes(
+              currentCapture.observation.controls.items.find(
+                (c) => c.ref === parsed.target.control_ref,
+              )?.role ?? "",
+            )
+          )
+            throw new SafeError(
+              "SELECT_TARGET_REQUIRED",
+              "Target the stable combobox/listbox parent, never an option. Bind the option label and choose contains or ends_with for prefixed labels.",
+            );
           const recorded = recordDurableTarget(
             parsed.target,
             currentCapture,
