@@ -189,7 +189,7 @@ export function recordDurableTarget(
       if (matchingRows.length > 1)
         throw new SafeError(
           "ROW_SELECTION_AMBIGUOUS",
-          "ROW_SELECTION_AMBIGUOUS: row_match identifies multiple rows; add a distinguishing criterion from the current observation.",
+          "ROW_SELECTION_AMBIGUOUS: row_match identifies multiple rows; use a distinguishing caller-supplied input or request human clarification if none is available.",
         );
       if (matchingRows.length !== 1 || matchingRows[0]?.ref !== row.ref)
         throw new SafeError(

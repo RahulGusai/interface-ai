@@ -102,7 +102,7 @@ export class OpenRouterClient implements ModelClient {
         function: {
           name: "define_capability",
           description:
-            "Provide concise reusable capability metadata and typed example inputs extracted from the task",
+            "Define the reusable operation and only the caller-provided values used to execute it. Requested results are outputs, never inputs.",
           parameters: z.toJSONSchema(capabilityDefinitionSchema, {
             io: "input",
           }),
@@ -113,8 +113,14 @@ export class OpenRouterClient implements ModelClient {
       [
         {
           role: "system",
-          content:
-            "Define the reusable operation before browser discovery. Extract every variable example input from the task and include all suppliedInputs. Include all explicit identity constraints: names, identifier suffixes, account or product types, branch or other locations, and date boundaries. Do not omit a location or qualifier merely because another identifier may already be unique. Return each input once with a name, description, and primitive example value. Use strings for identifiers, account numbers or suffixes (preserving leading zeros) and dates; numbers for quantities; booleans for switches. Convert an explicit month/year or date range into two inputs start_date and end_date with inclusive YYYY-MM-DD boundary values, so UI date filters can bind directly; do not emit one display-period input. Use concise name and description without example-specific identities. Call define_capability once. Do not invent facts missing from the task. The runtime constructs the typed input schema from your examples.",
+          content: `Define concise reusable capability metadata before browser discovery. Call define_capability once.
+An INPUT is a concrete value the caller has supplied to perform the operation, such as a customer name to search for. An OUTPUT is information the caller asks you to find or report, such as the customer's ID or contact details. Requested outputs MUST NOT appear in inputs. Never invent example values, placeholders, identifiers or contact details for information you have been asked to discover.
+Use the smallest input list that covers the actual supplied values. Include all suppliedInputs and all explicit identity/search constraints with values stated in the task: names, identifier suffixes, account or product types, branches or other locations, and date boundaries. Do not add a branch, ID, date of birth, or other discriminator merely because the task mentions possible duplicate names. Discovery can request clarification if the supplied values cannot uniquely identify a record. Fixed instructions such as choosing the correct customer, reporting contact details, and not changing records are behavior, not inputs. Preserve that behavior in the capability description; do not replace selecting the correct customer with returning all matching profiles.
+Examples:
+- "Find Freya Ferreira, making sure you select the correct customer if multiple people share that name. Open their profile and report their customer ID and contact details without changing any records." with suppliedInputs:{} has exactly ONE input: customer_name="Freya Ferreira". Customer ID and contact details are outputs. No invented disambiguation inputs.
+- "Find Freya Ferreira at Harbor Street and report their customer ID and contact details." with suppliedInputs:{} has TWO inputs: customer_name="Freya Ferreira", branch="Harbor Street".
+- "Find customer C271413 and report their name and email." with suppliedInputs:{} has ONE input: customer_id="C271413". Name and email are outputs.
+Return each input once with a name, description, and primitive example value from the task or suppliedInputs. Use strings for identifiers, account numbers or suffixes (preserving leading zeros) and dates; numbers for quantities; booleans for supplied switches. Convert an explicit month/year or date range into start_date and end_date with inclusive YYYY-MM-DD boundaries for UI filters; do not emit a display-period input. Use a concise name and description without example-specific identities. The runtime constructs the typed input schema from your examples.`,
         },
         { role: "user", content: JSON.stringify({ goal, suppliedInputs }) },
       ],
