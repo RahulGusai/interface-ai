@@ -138,9 +138,41 @@ export async function runTask(
           };
           if (name === "type_text")
             properties.text = {
-              ...explicitDiscoveryExpression.toJSONSchema(),
               type: "object",
-              description: `${expression.description} Always send a JSON object, never a quoted/escaped object. For fixed text use {"kind":"literal","value":"fixed text"}.`,
+              oneOf: [
+                ...(refs.length
+                  ? [
+                      {
+                        type: "object",
+                        properties: {
+                          kind: { type: "string", const: "input" },
+                          path: {
+                            type: "string",
+                            enum: refs.map((ref) => ref.path),
+                          },
+                        },
+                        required: ["kind", "path"],
+                        additionalProperties: false,
+                      },
+                    ]
+                  : []),
+                ...(
+                  explicitDiscoveryExpression.toJSONSchema() as any
+                ).oneOf.filter(
+                  (variant: any) =>
+                    variant.properties.kind.const === "template",
+                ),
+                {
+                  type: "object",
+                  properties: {
+                    kind: { type: "string", const: "literal" },
+                    value: { type: "string", const: "" },
+                  },
+                  required: ["kind", "value"],
+                  additionalProperties: false,
+                },
+              ],
+              description: `${expression.description} Always send a JSON input-reference object, never a quoted/escaped object. Literal is only offered for clearing text: {"kind":"literal","value":""}. Use a template for fixed text or text combined with references.`,
             };
           if (["click", "type_text"].includes(name))
             properties.row_match = rowSchema;
@@ -419,7 +451,19 @@ export async function runTask(
     );
     if (options.discovery && preflight?.result.status === "error") {
       const content = discoveryCorrection(preflight.result.code);
-      if (content)
+      if (
+        content &&
+        !(
+          content.startsWith("Persistent discovery rule:") &&
+          (context!.history.messages.some(
+            (message) =>
+              message.role === "system" && message.content === content,
+          ) ||
+            pendingCorrections.some(
+              (correction) => correction.content === content,
+            ))
+        )
+      )
         pendingCorrections.push({ code: preflight.result.code, content });
     }
     return response;

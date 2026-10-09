@@ -242,6 +242,17 @@ it("reports the rejected extraction target and allows a corrected labeled source
     s.definitions[0].find((d: any) => d.function.name === "type_text").function
       .parameters.properties.text.type,
   ).toBe("object");
+  const textVariants = s.definitions[0].find(
+    (d: any) => d.function.name === "type_text",
+  ).function.parameters.properties.text.oneOf;
+  expect(
+    textVariants.find((v: any) => v.properties.kind.const === "literal")
+      .properties.value.const,
+  ).toBe("");
+  expect(
+    textVariants.find((v: any) => v.properties.kind.const === "input")
+      .properties.path.enum,
+  ).toEqual(["account_suffix"]);
   expect(
     s.context.artifact?.definition.output_mapping.account_number,
   ).toMatchObject({ kind: "step_output" });

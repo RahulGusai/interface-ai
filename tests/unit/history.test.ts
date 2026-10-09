@@ -519,3 +519,15 @@ it("expires trusted correction instructions after the corrected model turn while
     content: "Trusted runtime correction: test",
   });
 });
+
+it("keeps the general binding rule across model turns without changing historical records", async () => {
+  const { discoveryCorrection } = await import("../../src/runtime/prompts.js");
+  const rule = discoveryCorrection("UNBOUND_INPUT_ARGUMENT")!;
+  const h = new ConversationHistory([{ role: "system", content: rule }]);
+  appendResult(h, "observe", "observe_ui", capture("fresh"));
+  const before = JSON.stringify(h.messages);
+  expect((h.toOpenRouterMessages()[0] as any).content).toContain(
+    "ALL later calls",
+  );
+  expect(JSON.stringify(h.messages)).toBe(before);
+});
