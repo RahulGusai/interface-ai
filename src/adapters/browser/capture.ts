@@ -133,7 +133,22 @@ export async function readSemantics(
           rows.indexOf(row) >= 0 &&
           Array.from(header.cells).every((c) => c.colSpan === 1) &&
           Array.from(row.cells).every((c) => c.colSpan === 1 && c.rowSpan === 1)
-        )
+        ) {
+          const sorts = Array.from(header.cells).flatMap(
+            (cell, column_index) => {
+              const aria = cell.getAttribute("aria-sort");
+              const text = cell.innerText || cell.textContent || "";
+              const direction =
+                aria === "ascending" || aria === "descending"
+                  ? aria
+                  : !aria && /[▲△↑]/.test(text) && !/[▼▽↓]/.test(text)
+                    ? "ascending"
+                    : !aria && /[▼▽↓]/.test(text) && !/[▲△↑]/.test(text)
+                      ? "descending"
+                      : undefined;
+              return direction ? [{ column_index, direction }] : [];
+            },
+          );
           tableCell = {
             columns: Array.from(header.cells).map((c) =>
               (c.innerText || c.textContent || "")
@@ -142,7 +157,11 @@ export async function readSemantics(
             ),
             column_index: e.cellIndex,
             row_index: rows.indexOf(row),
+            ...(sorts.length === 1
+              ? { sort: sorts[0] as NonNullable<Control["table_cell"]>["sort"] }
+              : {}),
           };
+        }
       }
     }
     const ancestry: { role: string; name: string; exact: true }[] = [];

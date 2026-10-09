@@ -1,8 +1,13 @@
+import { unusedDiscoveryInputs } from "./input-coverage.js";
 import type { DiscoveryContext } from "./discovery-context.js";
 import { discoveryCorrection } from "./prompts.js";
 import { isDeepStrictEqual } from "node:util";
 import { buildArtifact } from "./artifact-builder.js";
-import { recordDurableTarget, recordingHint } from "./target-recorder.js";
+import {
+  recordDurableTarget,
+  recordingHint,
+  rowRank,
+} from "./target-recorder.js";
 import type { Capture } from "../contracts/observation.js";
 import { SafeError } from "../contracts/errors.js";
 import {
@@ -173,11 +178,16 @@ export async function runTask(
                 ...original.fields.items,
                 properties: {
                   ...original.fields.items.properties,
+                  row_rank: {
+                    ...rowRank.toJSONSchema(),
+                    description:
+                      "For ranked results, declare the observed sort column, direction and zero-based visible row index. Filter/sort first. Required when omitting row_match for parameterized table extraction.",
+                  },
                   row_match: {
                     ...rowSchema,
                     description:
                       rowSchema.description +
-                      " For a ranked result, first sort/filter the table in the UI and omit row_match to retain its visible row position.",
+                      " For a ranked result, first sort/filter the table in the UI and provide row_rank instead of row_match.",
                   },
                 },
               },
@@ -231,7 +241,17 @@ export async function runTask(
         const action = parseToolAction(call.name, resolved);
         if (options.discovery.metadata)
           assertBoundArguments(call.name, parsed, options.discovery.inputs);
-        if (action.name === "finish_task") parsed = action.input;
+        if (action.name === "finish_task") {
+          parsed = action.input;
+          if (action.input.outcome === "goal_achieved") {
+            const unused = unusedDiscoveryInputs(options.discovery);
+            if (unused.length)
+              throw new SafeError(
+                "UNUSED_CAPABILITY_INPUT",
+                `Declared inputs have no successful bound use or verification: ${unused.join(", ")}. Verify these constraints using input-bound row_match or tool arguments before finishing. Do not silently drop them or claim they were verified.`,
+              );
+          }
+        }
         if (
           "observation_id" in action.input &&
           (!context!.adapter.isCurrentObservation(
@@ -309,6 +329,7 @@ export async function runTask(
                   undefined,
                   fieldRowMatches?.[index],
                   options.discovery!.inputs,
+                  f.row_rank,
                 ).target,
               ];
             }),

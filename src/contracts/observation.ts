@@ -12,6 +12,10 @@ export const target = z.discriminatedUnion("kind", [
   controlTarget,
   pointTarget,
 ]);
+export const tableSort = z.strictObject({
+  column_index: z.number().int().nonnegative(),
+  direction: z.enum(["ascending", "descending"]),
+});
 export const controlSchema = z.strictObject({
   ref: z.string(),
   parent_ref: z.string().optional(),
@@ -20,6 +24,7 @@ export const controlSchema = z.strictObject({
       columns: z.array(z.string()).min(1),
       column_index: z.number().int().nonnegative(),
       row_index: z.number().int().nonnegative(),
+      sort: tableSort.optional(),
     })
     .optional(),
   role: z.string(),

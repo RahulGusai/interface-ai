@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { tableSort } from "./observation.js";
 import { objectRecord } from "./object-record.js";
 export const primitive = z.union([
   z.string(),
@@ -132,6 +133,7 @@ export const durableTarget = z.discriminatedUnion("kind", [
     columns: z.array(z.string()).min(1),
     column_index: z.number().int().nonnegative(),
     row_index: z.number().int().nonnegative().nullable(),
+    sort: tableSort.optional(),
     scope: z.array(scope).nullable(),
     required_matches: z.literal(1),
   }),

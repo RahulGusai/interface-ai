@@ -161,6 +161,23 @@ it("reports the rejected extraction target and allows a corrected labeled source
         outputs: { account_number: "012-9637106" },
       },
     },
+    {
+      name: "type_text",
+      args: {
+        observation_id: "obs_2",
+        target: { kind: "control", control_ref: "search" },
+        text: { kind: "input", path: "account_suffix" },
+        mode: "replace",
+      },
+    },
+    {
+      name: "finish_task",
+      args: {
+        outcome: "goal_achieved",
+        summary: "Read verified account",
+        outputs: { account_number: "012-9637106" },
+      },
+    },
   ]);
   const rejected = s.audits.find(
     (e) => e.type === "tool_finished" && e.call.id === "call_1",
@@ -185,6 +202,12 @@ it("reports the rejected extraction target and allows a corrected labeled source
   expect(rejected.result.message).not.toContain("7106");
   expect(s.adapter.calls.filter((c) => c.name === "extract_data")).toHaveLength(
     1,
+  );
+  expect(s.audits).toContainEqual(
+    expect.objectContaining({
+      type: "discovery_correction",
+      code: "UNUSED_CAPABILITY_INPUT",
+    }),
   );
   expect(s.result.status).toBe("goal_achieved");
   expect(s.histories[0]?.[0]).toMatchObject({

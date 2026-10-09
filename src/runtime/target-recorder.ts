@@ -20,17 +20,29 @@ export const recordingHint = z.strictObject({
     description: z.string().min(1),
   }),
 });
+export const rowRank = z.strictObject({
+  column: z.string().min(1),
+  direction: z.enum(["ascending", "descending"]),
+  row_index: z.number().int().nonnegative(),
+});
 export function recordDurableTarget(
   target: Target,
   capture: Capture,
   hint?: unknown,
   rowMatch?: Record<string, unknown>,
   variableInputs?: Record<string, unknown>,
+  rankHint?: unknown,
 ): {
   target: DurableTarget;
   crop?: Buffer;
   provenance?: Record<string, unknown>;
 } {
+  if (rowMatch && rankHint)
+    throw new SafeError(
+      "ROW_RANK_INVALID",
+      "Use row_match or row_rank, never both.",
+    );
+  const rank = rankHint === undefined ? undefined : rowRank.parse(rankHint);
   const observation = capture.observation;
   if (observation.status !== "ok") throw Error("REFERENCE_CAPTURE_REQUIRED");
   if (rowMatch && Object.keys(rowMatch).length && target.kind !== "control")
@@ -105,6 +117,7 @@ export function recordDurableTarget(
     if (control.role === "cell" && control.table_cell) {
       if (
         !rowMatch &&
+        !rank &&
         inputValues.some((value) => control.name.toLowerCase().includes(value))
       )
         throw new SafeError(
@@ -122,16 +135,42 @@ export function recordDurableTarget(
             "row_match must identify exactly the selected table row. Use more criteria if necessary.",
           );
       }
+      if (!rowMatch && inputValues.length && !rank)
+        throw new SafeError(
+          "ROW_RANK_REQUIRED",
+          "Unbound table extraction needs explicit row_rank: {column, direction, row_index}. Filter and sort in the UI first. For largest debit, sort Amount so the greatest debit magnitude is first, verify ordering, and use row_index:0 for all related fields.",
+        );
+      if (
+        rank &&
+        (!control.table_cell.sort ||
+          control.table_cell.columns.filter((c) => c === rank.column).length !==
+            1 ||
+          control.table_cell.columns[control.table_cell.sort.column_index] !==
+            rank.column ||
+          control.table_cell.sort.direction !== rank.direction ||
+          control.table_cell.row_index !== rank.row_index)
+      )
+        throw new SafeError(
+          "ROW_RANK_INVALID",
+          "row_rank must match the observed table sort column, direction and selected visible row index. Sort using the UI, observe and verify ordering before extracting.",
+        );
+      const { sort, ...cell } = control.table_cell;
       return {
         target: {
           kind: "table_cell",
-          ...control.table_cell,
+          ...cell,
+          ...(rank && sort ? { sort } : {}),
           row_index: rowMatch ? null : control.table_cell.row_index,
           scope: stableAncestry(control.ancestry),
           required_matches: 1,
         },
       };
     }
+    if (rank)
+      throw new SafeError(
+        "ROW_RANK_INVALID",
+        "row_rank requires a table cell source.",
+      );
     if (rowMatch && Object.keys(rowMatch).length) {
       const row = controls.find(
         (item) => item.ref === control.parent_ref && item.role === "row",

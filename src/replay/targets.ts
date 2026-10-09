@@ -62,6 +62,10 @@ export function resolveTarget(
         (control) =>
           control.role === "cell" &&
           control.table_cell?.column_index === target.column_index &&
+          (!target.sort ||
+            (control.table_cell.sort?.column_index ===
+              target.sort.column_index &&
+              control.table_cell.sort?.direction === target.sort.direction)) &&
           JSON.stringify(control.table_cell.columns) ===
             JSON.stringify(target.columns) &&
           (!target.scope ||

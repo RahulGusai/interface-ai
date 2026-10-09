@@ -198,6 +198,7 @@ export function resolveDiscoveryArguments(
         field.row_match ? resolvedRowMatch.parse(field.row_match) : undefined,
       );
       delete field.row_match;
+      delete field.row_rank;
     }
   }
   return { resolved, rowMatch, fieldRowMatches };
