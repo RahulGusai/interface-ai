@@ -153,8 +153,18 @@ export async function selectOption(
   if (target.kind !== "control")
     throw new SafeError("UNSUPPORTED", "Control required");
   const { element, options } = target.binding;
-  if (!options || !options.includes(label))
-    throw new SafeError("UNOBSERVED_OPTION", "Option was not observed");
+  if (!options?.includes(label)) {
+    const matches =
+      options?.filter(
+        (option) => option.toLowerCase() === label.toLowerCase(),
+      ) ?? [];
+    if (matches.length !== 1)
+      throw new SafeError(
+        "UNOBSERVED_OPTION",
+        "Option was not observed uniquely",
+      );
+    label = matches[0]!;
+  }
   const valid = await element.evaluate((e, label) => {
     if (!(e instanceof HTMLSelectElement) || e.multiple) return false;
     const matches = Array.from(e.options).filter((o) => o.label === label);
