@@ -92,6 +92,29 @@ it("rejects misplaced row operators and resolves named bound suffix criteria", (
   ).toEqual({ suffix: { operator: "ends_with", value: "7106" } });
 });
 
+it("requests an input-bound row for identity extraction rather than unrelated ranking", () => {
+  const c = capture(["Freya"]);
+  if (
+    c.observation.status !== "ok" ||
+    c.observation.controls.status !== "available"
+  )
+    throw Error();
+  c.observation.controls.items.find((x) => x.ref === "id0")!.table_cell = {
+    columns: ["Name", "Customer ID"],
+    column_index: 1,
+    row_index: 0,
+  };
+  expect(() =>
+    recordDurableTarget(
+      { kind: "control", control_ref: "id0" },
+      c,
+      undefined,
+      undefined,
+      { customer: "Freya" },
+    ),
+  ).toThrowError(/ROW_MATCH_REQUIRED/);
+});
+
 it("records a row action without retaining the discovered identity and selects a fresh matching row", () => {
   const original = capture(["Freya", "Mira"]);
   const saved = recordDurableTarget(

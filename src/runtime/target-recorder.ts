@@ -115,6 +115,12 @@ export function recordDurableTarget(
         "row_match is required for a data-row action." + rowHint,
       );
     if (control.role === "cell" && control.table_cell) {
+      if (!rowMatch && !rank && Object.keys(suggestedCriteria).length)
+        throw new SafeError(
+          "ROW_MATCH_REQUIRED",
+          "ROW_MATCH_REQUIRED: Identify this record using input-bound row_match, not a rank." +
+            rowHint,
+        );
       if (
         !rowMatch &&
         !rank &&

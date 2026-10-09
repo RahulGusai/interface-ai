@@ -217,7 +217,25 @@ export async function runTask(
                 ...original.option,
                 properties: {
                   ...original.option.properties,
-                  label: expression,
+                  label: {
+                    oneOf: [
+                      {
+                        type: "object",
+                        properties: {
+                          kind: { type: "string", const: "input" },
+                          path: {
+                            type: "string",
+                            enum: refs.map((ref) => ref.path),
+                          },
+                        },
+                        required: ["kind", "path"],
+                        additionalProperties: false,
+                      },
+                      { type: "string" },
+                    ],
+                    description:
+                      "For a variable selection send a DIRECT input reference, never a template or literal object. Use match:contains or ends_with for prefixed labels so the option code can change during replay. Plain strings are only for fixed constants.",
+                  },
                 },
               };
             }

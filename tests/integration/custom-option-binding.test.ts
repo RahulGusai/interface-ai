@@ -245,6 +245,10 @@ it("records selection bindings on a stable parent and replays another prefixed b
             const o = lastObservation(messages);
             if (o.controls.status !== "available")
               throw Error("Missing controls");
+            if (turn === 2)
+              expect(
+                messages.filter((m) => m.role === "tool").at(-1)?.content,
+              ).toContain("SELECT_INPUT_REQUIRED");
             const target = {
               kind: "control",
               control_ref: o.controls.items.find((c) => c.name === "Branch")!
@@ -253,12 +257,30 @@ it("records selection bindings on a stable parent and replays another prefixed b
             const calls = [
               {
                 id: String(turn),
-                name: ["click", "select_option", "extract_data", "finish_task"][
-                  turn
-                ]!,
+                name: [
+                  "click",
+                  "select_option",
+                  "select_option",
+                  "extract_data",
+                  "finish_task",
+                ][turn]!,
                 argumentsJson: JSON.stringify(
                   [
                     { observation_id: o.observation_id, target },
+                    {
+                      observation_id: o.observation_id,
+                      target,
+                      option: {
+                        label: {
+                          kind: "template",
+                          parts: [
+                            "012 — ",
+                            { kind: "input", path: "location" },
+                          ],
+                        },
+                        match: "exact",
+                      },
+                    },
                     {
                       observation_id: o.observation_id,
                       target,

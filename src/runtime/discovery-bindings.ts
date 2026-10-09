@@ -9,6 +9,21 @@ export function assertBoundArguments(
   inputs: Record<string, unknown>,
 ) {
   if (["finish_task", "request_human"].includes(tool)) return;
+  if (
+    tool === "select_option" &&
+    raw.option?.label?.kind === "template" &&
+    raw.option.label.parts.some(
+      (part: unknown) =>
+        part !== null &&
+        typeof part === "object" &&
+        "kind" in part &&
+        part.kind === "input",
+    )
+  )
+    throw new SafeError(
+      "SELECT_INPUT_REQUIRED",
+      "SELECT_INPUT_REQUIRED: option.label must be a direct input reference. Do not freeze observed option codes or prefixes into templates. Use match:contains or match:ends_with for a name inside a prefixed label; the runtime resolves the unique current option.",
+    );
   const variableValues = Object.values(inputs)
     .filter((value) => ["string", "number", "boolean"].includes(typeof value))
     .map((value) => String(value).toLowerCase())
@@ -51,7 +66,7 @@ export function assertBoundArguments(
   if (invalid)
     throw new SafeError(
       "UNBOUND_INPUT_ARGUMENT",
-      `UNBOUND_INPUT_ARGUMENT: ${invalid} contains a variable example value. Replace it with an input reference or template; keep fixed values plain. Available references: ${JSON.stringify(Object.keys(inputs).map((path) => ({ kind: "input", path })))}`,
+      `UNBOUND_INPUT_ARGUMENT: ${invalid} contains a variable example value. ${tool === "select_option" ? "Replace option.label with a direct input reference and use match:contains or ends_with for prefixed labels; never freeze a code into a template." : "Replace it with an input reference or template; keep fixed values plain."} Available references: ${JSON.stringify(Object.keys(inputs).map((path) => ({ kind: "input", path })))}`,
     );
 }
 

@@ -29,9 +29,13 @@ export function buildInitialMessages(
 // Only runtime-authored validation categories get higher-priority repair guidance.
 // Never copy browser text or arbitrary tool/provider errors into these messages.
 export function discoveryCorrection(code: string): string | undefined {
+  if (code === "ROW_MATCH_REQUIRED")
+    return 'Persistent discovery rule: A data-row action or extraction MUST include row_match as a separate JSON object, not inside target. For click send {"target":{"kind":"control","control_ref":"the_current_ref"},"row_match":{"input_name":{"kind":"input","path":"input_name"}}}. Use actual input names and matching contains/ends_with operators when needed. NEVER stringify target or row_match, and never place row_match inside target. For extract_data, put row_match alongside each field target. This is input-based record selection; do not substitute row_rank unless the task actually asks for a ranked result and the UI ordering is verified. Apply this rule to every later data-row call.';
   if (code === "UNBOUND_INPUT_ARGUMENT")
     return "Persistent discovery rule: Every variable typed value, option, expected value and row criterion must use an actual input reference. Apply this to ALL later calls, including both dates and repeated searches, even after navigating or observing again. Never wrap an example value in kind:literal, and never stringify a binding. Use templates only to combine references with fixed text. Each row_match key binds the same named input. Metadata generation does not bind execution: you must send these references in each applicable tool call.";
   const guidance: Record<string, string> = {
+    SELECT_INPUT_REQUIRED:
+      "The rejected selection was not executed. Send option.label as a direct input-reference object without a template or observed code prefix. For a prefixed option use option:{label:{kind:input,path:the_declared_input_name},match:contains}. The runtime must match one current option inside the stable dropdown. A code observed in discovery cannot be frozen for changed-input replay.",
     SELECT_TARGET_REQUIRED:
       "The rejected selection was not executed. Target the stable combobox/listbox parent, never an option. Open the dropdown if needed, then use select_option with a bound option.label and contains or ends_with for prefixed labels. Require one observed match inside this dropdown. Do not click the variable option or freeze its code into a template.",
     UNUSED_CAPABILITY_INPUT:
