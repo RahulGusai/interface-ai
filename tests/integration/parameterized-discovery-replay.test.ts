@@ -194,104 +194,115 @@ it("discovers input binding and row selection, then replays against a different 
   }
 });
 
-it("rejects a same-name row action and provides clarification guidance without inventing another input", async () => {
-  const fixture = await startFixture(undefined, html.replace("Mira", "Freya"));
-  try {
-    const discovery: DiscoveryContext = {
-      deployment: {
-        app_deployment_id: "d",
-        base_url: fixture.url,
-        product_id: "desk",
-        ui_variant: "standard",
-        vendor_release: null,
-        config_version: 1,
-      },
-      metadata: {
-        name: "Find customer",
-        description: "Find a customer and report their status",
-        input_schema: {
-          type: "object",
-          properties: { customer_name: { type: "string" } },
-          required: ["customer_name"],
-          additionalProperties: false,
+it.each([
+  { nameCell: "Freya", code: "ROW_SELECTION_AMBIGUOUS" },
+  { nameCell: "Freya SAME NAME", code: "ROW_SELECTION_MISMATCH" },
+])(
+  "provides clarification guidance for $code without inventing another input",
+  async ({ nameCell, code }) => {
+    const fixture = await startFixture(
+      undefined,
+      html
+        .replace("<td>Freya</td>", `<td>${nameCell}</td>`)
+        .replace("<td>Mira</td>", `<td>${nameCell}</td>`),
+    );
+    try {
+      const discovery: DiscoveryContext = {
+        deployment: {
+          app_deployment_id: "d",
+          base_url: fixture.url,
+          product_id: "desk",
+          ui_variant: "standard",
+          vendor_release: null,
+          config_version: 1,
         },
-        example_inputs: { customer_name: "Freya" },
-      },
-      capability_catalog: [],
-      inputs: { customer_name: "Freya" },
-      records: [],
-      references: [],
-    };
-    const audits: AuditRecord[] = [];
-    let turn = 0;
-    const result = await runTask(
-      { goal: "Find Freya and report status", targetUrl: fixture.url },
-      {
-        adapterFactory: createBrowserFactory({ headless: true }),
-        model: {
-          model: "scripted",
-          async complete(messages) {
-            const o = lastObservation(messages);
-            if (o.controls.status !== "available")
-              throw Error("controls unavailable");
-            const first = turn++ === 0;
-            const name = first ? "click" : "request_human";
-            const args = first
-              ? {
-                  observation_id: o.observation_id,
-                  target: {
-                    kind: "control",
-                    control_ref: o.controls.items.find(
-                      (c) => c.name === "Open Freya C001",
-                    )?.ref,
-                  },
-                  row_match: {
-                    customer_name: { kind: "input", path: "customer_name" },
-                  },
-                }
-              : {
-                  observation_id: o.observation_id,
-                  reason: "ambiguous_state",
-                  message:
-                    "Two customers match Freya. Which customer do you mean?",
-                };
-            const calls = [
-              { id: String(turn), name, argumentsJson: JSON.stringify(args) },
-            ];
-            return {
-              kind: "tool_calls" as const,
-              calls,
-              assistantMessage: {
-                role: "assistant" as const,
-                content: null,
-                tool_calls: calls,
-              },
-            };
+        metadata: {
+          name: "Find customer",
+          description: "Find a customer and report their status",
+          input_schema: {
+            type: "object",
+            properties: { customer_name: { type: "string" } },
+            required: ["customer_name"],
+            additionalProperties: false,
+          },
+          example_inputs: { customer_name: "Freya" },
+        },
+        capability_catalog: [],
+        inputs: { customer_name: "Freya" },
+        records: [],
+        references: [],
+      };
+      const audits: AuditRecord[] = [];
+      let turn = 0;
+      const result = await runTask(
+        { goal: "Find Freya and report status", targetUrl: fixture.url },
+        {
+          adapterFactory: createBrowserFactory({ headless: true }),
+          model: {
+            model: "scripted",
+            async complete(messages) {
+              const o = lastObservation(messages);
+              if (o.controls.status !== "available")
+                throw Error("controls unavailable");
+              const first = turn++ === 0;
+              const name = first ? "click" : "request_human";
+              const args = first
+                ? {
+                    observation_id: o.observation_id,
+                    target: {
+                      kind: "control",
+                      control_ref: o.controls.items.find(
+                        (c) => c.name === "Open Freya C001",
+                      )?.ref,
+                    },
+                    row_match: {
+                      customer_name: { kind: "input", path: "customer_name" },
+                    },
+                  }
+                : {
+                    observation_id: o.observation_id,
+                    reason: "ambiguous_state",
+                    message:
+                      "Two customers match Freya. Which customer do you mean?",
+                  };
+              const calls = [
+                { id: String(turn), name, argumentsJson: JSON.stringify(args) },
+              ];
+              return {
+                kind: "tool_calls" as const,
+                calls,
+                assistantMessage: {
+                  role: "assistant" as const,
+                  content: null,
+                  tool_calls: calls,
+                },
+              };
+            },
           },
         },
-      },
-      {
-        discovery,
-        onAudit: (event) => {
-          audits.push(event);
+        {
+          discovery,
+          onAudit: (event) => {
+            audits.push(event);
+          },
         },
-      },
-    );
-    expect(result.status).toBe("needs_intervention");
-    expect(turn).toBe(2);
-    expect(discovery.artifact).toBeUndefined();
-    expect(Object.keys(discovery.metadata!.input_schema.properties)).toEqual([
-      "customer_name",
-    ]);
-    expect(audits).toContainEqual(
-      expect.objectContaining({
-        type: "discovery_correction",
-        code: "ROW_SELECTION_AMBIGUOUS",
-        content: expect.stringContaining("request_human"),
-      }),
-    );
-    expect(discovery.records.some((r) => r.tool === "click")).toBe(false);
-  } finally {
-    await fixture.close();
-  }
-});
+      );
+      expect(result.status).toBe("needs_intervention");
+      expect(turn).toBe(2);
+      expect(discovery.artifact).toBeUndefined();
+      expect(Object.keys(discovery.metadata!.input_schema.properties)).toEqual([
+        "customer_name",
+      ]);
+      expect(audits).toContainEqual(
+        expect.objectContaining({
+          type: "discovery_correction",
+          code,
+          content: expect.stringContaining("request_human"),
+        }),
+      );
+      expect(discovery.records.some((r) => r.tool === "click")).toBe(false);
+    } finally {
+      await fixture.close();
+    }
+  },
+);
