@@ -1,3 +1,4 @@
+import { isReusableExtractionSource } from "./extraction-source.js";
 import { unusedDiscoveryInputs } from "./input-coverage.js";
 import type { DiscoveryContext } from "./discovery-context.js";
 import { discoveryCorrection } from "./prompts.js";
@@ -78,160 +79,192 @@ export async function runTask(
   const pendingCorrections: { code: string; content: string }[] = [];
   const getDefinitions = () =>
     options.discovery
-      ? toolDefinitions.map((d) => {
-          const name = d.function.name;
-          const original = (d.function.parameters as any).properties;
-          const properties: Record<string, any> = { ...original };
-          if (["click", "type_text", "scroll"].includes(name))
-            properties.recording_hint = recordingHint.toJSONSchema();
-          const refs = Object.keys(
-            options.discovery!.metadata?.input_schema.properties ?? {},
-          ).map((path) => ({ kind: "input", path }));
-          const expression = {
-            ...discoveryExpressionJson,
-            description: `Variable task values MUST use input references, never their example literals. Available references: ${JSON.stringify(refs)}. Templates may combine references with fixed text. Plain values are only for fixed constants.`,
-          };
-          const rowSchema = {
-            type: "object",
-            minProperties: 1,
-            additionalProperties: false,
-            description:
-              "Map input names to binding objects for values visibly present in this row. Do not put operator/value at the top level. Example: " +
-              JSON.stringify(
-                Object.fromEntries(
-                  refs.slice(0, 1).map((ref) => [ref.path, ref]),
-                ),
-              ),
-            properties: Object.fromEntries(
-              refs.map((ref) => {
-                const bound = {
-                  type: "object",
-                  properties: {
-                    kind: { const: "input", type: "string" },
-                    path: { const: ref.path, type: "string" },
-                  },
-                  required: ["kind", "path"],
-                  additionalProperties: false,
-                };
-                return [
-                  ref.path,
-                  {
-                    oneOf: [
-                      bound,
-                      {
-                        type: "object",
-                        properties: {
-                          operator: {
-                            enum: ["ends_with", "contains"],
-                            type: "string",
-                          },
-                          value: bound,
-                        },
-                        required: ["operator", "value"],
-                        additionalProperties: false,
-                      },
-                    ],
-                  },
-                ];
-              }),
-            ),
-          };
-          if (name === "type_text")
-            properties.text = {
+      ? toolDefinitions
+          .map((d) => {
+            const name = d.function.name;
+            const original = (d.function.parameters as any).properties;
+            const properties: Record<string, any> = { ...original };
+            const observation = currentCapture?.observation;
+            if (original.observation_id && observation?.status === "ok")
+              properties.observation_id = {
+                type: "string",
+                const: observation.observation_id,
+                description: "Use this current observation id exactly.",
+              };
+            const extractionRefs =
+              observation?.status === "ok" &&
+              observation.controls.status === "available"
+                ? observation.controls.items
+                    .filter(isReusableExtractionSource)
+                    .map((c) => c.ref)
+                : [];
+            if (["click", "type_text", "scroll"].includes(name))
+              properties.recording_hint = recordingHint.toJSONSchema();
+            const refs = Object.keys(
+              options.discovery!.metadata?.input_schema.properties ?? {},
+            ).map((path) => ({ kind: "input", path }));
+            const expression = {
+              ...discoveryExpressionJson,
+              description: `Variable task values MUST use input references, never their example literals. Available references: ${JSON.stringify(refs)}. Templates may combine references with fixed text. Plain values are only for fixed constants.`,
+            };
+            const rowSchema = {
               type: "object",
-              oneOf: [
-                ...(refs.length
-                  ? [
-                      {
-                        type: "object",
-                        properties: {
-                          kind: { type: "string", const: "input" },
-                          path: {
-                            type: "string",
-                            enum: refs.map((ref) => ref.path),
-                          },
-                        },
-                        required: ["kind", "path"],
-                        additionalProperties: false,
-                      },
-                    ]
-                  : []),
-                ...(
-                  explicitDiscoveryExpression.toJSONSchema() as any
-                ).oneOf.filter(
-                  (variant: any) =>
-                    variant.properties.kind.const === "template",
+              minProperties: 1,
+              additionalProperties: false,
+              description:
+                "Map input names to binding objects for values visibly present in this row. Do not put operator/value at the top level. Example: " +
+                JSON.stringify(
+                  Object.fromEntries(
+                    refs.slice(0, 1).map((ref) => [ref.path, ref]),
+                  ),
                 ),
-                {
-                  type: "object",
-                  properties: {
-                    kind: { type: "string", const: "literal" },
-                    value: { type: "string", const: "" },
-                  },
-                  required: ["kind", "value"],
-                  additionalProperties: false,
-                },
-              ],
-              description: `${expression.description} Always send a JSON input-reference object, never a quoted/escaped object. Literal is only offered for clearing text: {"kind":"literal","value":""}. Use a template for fixed text or text combined with references.`,
-            };
-          if (["click", "type_text"].includes(name))
-            properties.row_match = rowSchema;
-          if (name === "select_option")
-            properties.option = {
-              ...original.option,
-              properties: {
-                ...original.option.properties,
-                label: expression,
-              },
-            };
-          if (["check_ui", "wait_for"].includes(name))
-            properties.condition = {
-              oneOf: original.condition.oneOf.map((variant: any) =>
-                variant.properties.expected
-                  ? {
-                      ...variant,
-                      properties: {
-                        ...variant.properties,
-                        expected: expression,
-                      },
-                    }
-                  : variant,
+              properties: Object.fromEntries(
+                refs.map((ref) => {
+                  const bound = {
+                    type: "object",
+                    properties: {
+                      kind: { const: "input", type: "string" },
+                      path: { const: ref.path, type: "string" },
+                    },
+                    required: ["kind", "path"],
+                    additionalProperties: false,
+                  };
+                  return [
+                    ref.path,
+                    {
+                      oneOf: [
+                        bound,
+                        {
+                          type: "object",
+                          properties: {
+                            operator: {
+                              enum: ["ends_with", "contains"],
+                              type: "string",
+                            },
+                            value: bound,
+                          },
+                          required: ["operator", "value"],
+                          additionalProperties: false,
+                        },
+                      ],
+                    },
+                  ];
+                }),
               ),
             };
-          if (name === "press_key")
-            properties.keys = {
-              ...original.keys,
-              items: expression,
-            };
-          if (name === "extract_data")
-            properties.fields = {
-              ...original.fields,
-              items: {
-                ...original.fields.items,
-                properties: {
-                  ...original.fields.items.properties,
-                  row_rank: {
-                    ...rowRank.toJSONSchema(),
-                    description:
-                      "For ranked results, declare the observed sort column, direction and zero-based visible row index. Filter/sort first. Required when omitting row_match for parameterized table extraction.",
+            if (name === "type_text")
+              properties.text = {
+                type: "object",
+                oneOf: [
+                  ...(refs.length
+                    ? [
+                        {
+                          type: "object",
+                          properties: {
+                            kind: { type: "string", const: "input" },
+                            path: {
+                              type: "string",
+                              enum: refs.map((ref) => ref.path),
+                            },
+                          },
+                          required: ["kind", "path"],
+                          additionalProperties: false,
+                        },
+                      ]
+                    : []),
+                  ...(
+                    explicitDiscoveryExpression.toJSONSchema() as any
+                  ).oneOf.filter(
+                    (variant: any) =>
+                      variant.properties.kind.const === "template",
+                  ),
+                  {
+                    type: "object",
+                    properties: {
+                      kind: { type: "string", const: "literal" },
+                      value: { type: "string", const: "" },
+                    },
+                    required: ["kind", "value"],
+                    additionalProperties: false,
                   },
-                  row_match: {
-                    ...rowSchema,
-                    description:
-                      rowSchema.description +
-                      " For a ranked result, first sort/filter the table in the UI and provide row_rank instead of row_match.",
+                ],
+                description: `${expression.description} Always send a JSON input-reference object, never a quoted/escaped object. Literal is only offered for clearing text: {"kind":"literal","value":""}. Use a template for fixed text or text combined with references.`,
+              };
+            if (["click", "type_text"].includes(name))
+              properties.row_match = rowSchema;
+            if (name === "select_option")
+              properties.option = {
+                ...original.option,
+                properties: {
+                  ...original.option.properties,
+                  label: expression,
+                },
+              };
+            if (["check_ui", "wait_for"].includes(name))
+              properties.condition = {
+                oneOf: original.condition.oneOf.map((variant: any) =>
+                  variant.properties.expected
+                    ? {
+                        ...variant,
+                        properties: {
+                          ...variant.properties,
+                          expected: expression,
+                        },
+                      }
+                    : variant,
+                ),
+              };
+            if (name === "press_key")
+              properties.keys = {
+                ...original.keys,
+                items: expression,
+              };
+            if (name === "extract_data")
+              properties.fields = {
+                ...original.fields,
+                items: {
+                  ...original.fields.items,
+                  properties: {
+                    ...original.fields.items.properties,
+                    target: {
+                      type: "object",
+                      properties: {
+                        kind: { type: "string", const: "control" },
+                        control_ref: { type: "string", enum: extractionRefs },
+                      },
+                      required: ["kind", "control_ref"],
+                      additionalProperties: false,
+                      description:
+                        "Only reusable labeled values or structured table cells are offered. If the required fact is absent, use UI navigation to return to its source page. Never substitute a summary or total for another field.",
+                    },
+                    row_rank: {
+                      ...rowRank.toJSONSchema(),
+                      description:
+                        "For ranked results, declare the observed sort column, direction and zero-based visible row index. Filter/sort first. Required when omitting row_match for parameterized table extraction.",
+                    },
+                    row_match: {
+                      ...rowSchema,
+                      description:
+                        rowSchema.description +
+                        " For a ranked result, first sort/filter the table in the UI and provide row_rank instead of row_match.",
+                    },
                   },
                 },
+              };
+            return {
+              ...d,
+              function: {
+                ...d.function,
+                parameters: { ...d.function.parameters, properties },
               },
             };
-          return {
-            ...d,
-            function: {
-              ...d.function,
-              parameters: { ...d.function.parameters, properties },
-            },
-          };
-        })
+          })
+          .filter(
+            (d) =>
+              d.function.name !== "extract_data" ||
+              (d.function.parameters as any).properties.fields.items.properties
+                .target.properties.control_ref.enum.length > 0,
+          )
       : toolDefinitions;
   const audit: AuditSink = async (record, image) => {
     if (auditFailed) throw new Error("Audit unavailable");
@@ -353,17 +386,28 @@ export async function runTask(
           parsed._durable_fields = Object.fromEntries(
             parsed.fields.map((f: any, index: number) => {
               fieldIndex = index;
-              return [
-                f.name,
-                recordDurableTarget(
-                  f.target,
-                  currentCapture!,
-                  undefined,
-                  fieldRowMatches?.[index],
-                  options.discovery!.inputs,
-                  f.row_rank,
-                ).target,
-              ];
+              const durable = recordDurableTarget(
+                f.target,
+                currentCapture!,
+                undefined,
+                fieldRowMatches?.[index],
+                options.discovery!.inputs,
+                f.row_rank,
+              ).target;
+              const observation = currentCapture!.observation;
+              const control =
+                observation.status === "ok" &&
+                observation.controls.status === "available"
+                  ? observation.controls.items.find(
+                      (c) => c.ref === f.target.control_ref,
+                    )
+                  : undefined;
+              if (!control || !isReusableExtractionSource(control))
+                throw new SafeError(
+                  "UNLABELED_EXTRACTION_SOURCE",
+                  "This value has no independent reusable label. Extract a labeled field or structured table cell. Use UI navigation to return to the source page if necessary; a value-named summary or transaction total cannot stand in for an account balance.",
+                );
+              return [f.name, durable];
             }),
           );
         } catch (error) {
@@ -385,7 +429,9 @@ export async function runTask(
     if (
       call.name === "extract_data" &&
       preflight?.result.status === "error" &&
-      preflight.result.code === "TARGET_DEPENDS_ON_INPUT"
+      ["TARGET_DEPENDS_ON_INPUT", "UNLABELED_EXTRACTION_SOURCE"].includes(
+        preflight.result.code,
+      )
     ) {
       if (isDeepStrictEqual(rejectedExtraction, normalized)) {
         preflight = {
@@ -630,7 +676,6 @@ export async function runTask(
           requested_inputs: options.discovery.inputs,
         });
     }
-    const definitions = getDefinitions();
     const bootstrap = await invoke(
       {
         id: "bootstrap",
@@ -686,7 +731,7 @@ export async function runTask(
           await withProviderRecovery(() =>
             deps.model.complete(
               context!.history.messages.map((m) => m),
-              definitions,
+              getDefinitions(),
               {
                 signal: options.signal,
                 ...(options.discovery ? { toolChoice: "required" } : {}),

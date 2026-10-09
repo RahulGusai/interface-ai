@@ -218,6 +218,19 @@ it("reports the rejected extraction target and allows a corrected labeled source
   const extractionSchema = s.definitions[0].find(
     (d: any) => d.function.name === "extract_data",
   ).function.parameters;
+  expect(extractionSchema.properties.observation_id.const).toBe("obs_1");
+  expect(
+    extractionSchema.properties.fields.items.properties.target.properties
+      .control_ref.enum,
+  ).toContain("stable");
+  expect(
+    extractionSchema.properties.fields.items.properties.target.properties
+      .control_ref.enum,
+  ).not.toContain("dynamic");
+  expect(
+    s.definitions[2].find((d: any) => d.function.name === "extract_data")
+      .function.parameters.properties.observation_id.const,
+  ).toBe("obs_2");
   expect(
     extractionSchema.properties.fields.items.properties.row_match,
   ).toBeDefined();
