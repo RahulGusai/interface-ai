@@ -71,6 +71,8 @@ export async function readSemantics(
         h3: "heading",
         label: "text",
         option: "option",
+        dt: "term",
+        dd: "definition",
       };
       const role =
         e.getAttribute("role") ??
@@ -93,12 +95,22 @@ export async function readSemantics(
               )
               .join(" ")
           : "";
+      // Definition-list values are identified by their associated term, never
+      // by the current value. This also supports dl > div > dt/dd groups.
+      let definitionLabel = "";
+      if (tag === "dd" && e.closest("dl")) {
+        let term = e.previousElementSibling;
+        while (term?.tagName === "DD") term = term.previousElementSibling;
+        if (term?.tagName === "DT" && term.closest("dl") === e.closest("dl"))
+          definitionLabel = term.textContent?.trim() ?? "";
+      }
       const name = (
         e.getAttribute("aria-label") ||
         labelled ||
         labels ||
         e.getAttribute("alt") ||
         e.getAttribute("title") ||
+        definitionLabel ||
         (e as HTMLElement).innerText ||
         e.textContent ||
         ""
