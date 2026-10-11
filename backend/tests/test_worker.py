@@ -13,7 +13,8 @@ class NeverRunner:
 
 
 @pytest.mark.asyncio
-async def test_worker_command_has_no_policy_configuration(repo, tmp_path):
+@pytest.mark.parametrize("policy", ["READ_ONLY", "READ_WRITE"])
+async def test_worker_command_includes_persisted_policy(repo, tmp_path, policy):
     commands = []
 
     class CaptureRunner:
@@ -23,8 +24,9 @@ async def test_worker_command_has_no_policy_configuration(repo, tmp_path):
 
     settings = Settings(repo_root=tmp_path, _env_file=None)
     worker = Worker(repo, settings, None, CaptureRunner())
-    pending = run(repo)
+    pending = run(repo, access_policy=policy)
     await worker.execute_raw(pending["run_id"])
+    assert commands[0]["access_policy"] == policy
     assert commands[0]["runtime"] == {"headless": False, "max_tool_calls": 40}
     assert (
         commands[0]["deployment"]["base_url"]

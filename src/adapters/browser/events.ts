@@ -11,6 +11,7 @@ export function installEvents(
   context: BrowserContext,
   page: Page,
   state: EventState,
+  onUnclassifiedDialog?: () => void,
 ) {
   page.on("framenavigated", () => {
     state.generation++;
@@ -29,6 +30,14 @@ export function installEvents(
         action: "accepted",
       };
       state.dialogs.push(event);
+      if (onUnclassifiedDialog) {
+        event.decision = "intervention";
+        event.action = "pending";
+        // Accepting or dismissing can resume application mutation code. Closing
+        // the context terminates the script without making either decision.
+        onUnclassifiedDialog();
+        return;
+      }
       try {
         await dialog.accept();
       } catch {

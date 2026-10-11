@@ -108,7 +108,7 @@ class Lifecycle:
                         "RUNTIME_STOPPED_REQUIRES_HUMAN"
                         if runtime["status"] == "needs_intervention"
                         else runtime.get("error", {}).get("code", "PROVIDER_ERROR")
-                        if runtime["status"] == "provider_error"
+                        if runtime["status"] in ("provider_error", "policy_blocked")
                         else "ARTIFACT_BUILD_FAILED"
                         if runtime.get("error", {}).get("code")
                         == "ARTIFACT_BUILD_FAILED"
@@ -437,11 +437,12 @@ class Lifecycle:
         request_hash=None,
         automatic=False,
         conn=None,
+        access_policy="READ_ONLY",
     ):
         if conn is None:
             with self.repo.db.transaction() as c:
                 return self.start_validation(
-                    artifact_id, inputs, key, request_hash, automatic, c
+                    artifact_id, inputs, key, request_hash, automatic, c, access_policy
                 )
         artifact = self.repo.get("artifacts", "artifact_id", artifact_id, conn)
         source = self.repo.get("runs", "run_id", artifact["source_run_id"], conn)
@@ -487,6 +488,7 @@ class Lifecycle:
             parent=source["run_id"],
             key=key,
             request_hash=request_hash,
+            access_policy=source["access_policy"] if automatic else access_policy,
         )
         self.repo.event(
             source["run_id"],

@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { finishTaskInput } from "./finish-task.draft.js";
 export const taskInputSchema = z.strictObject({
+  accessPolicy: z.enum(["READ_ONLY", "READ_WRITE"]).default("READ_ONLY"),
   goal: z.string().trim().min(1),
   targetUrl: z.url().refine((s) => {
     const u = new URL(s);
@@ -9,7 +10,7 @@ export const taskInputSchema = z.strictObject({
     );
   }),
 });
-export type TaskInput = z.infer<typeof taskInputSchema>;
+export type TaskInput = z.input<typeof taskInputSchema>;
 export const toolCallSchema = z.strictObject({
   id: z.string().min(1),
   name: z.string().min(1),

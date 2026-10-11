@@ -198,8 +198,10 @@ class Repository:
         parent=None,
         key=None,
         request_hash=None,
+        access_policy="READ_ONLY",
     ):
         data = {
+            "access_policy": access_policy,
             "run_id": identifier(),
             "kind": kind,
             "purpose": purpose,
@@ -230,7 +232,12 @@ class Repository:
             data["run_id"],
             "run_queued",
             {
-                "request": {"kind": kind, "task": task, "inputs": inputs or {}},
+                "request": {
+                    "kind": kind,
+                    "task": task,
+                    "inputs": inputs or {},
+                    "access_policy": access_policy,
+                },
                 "purpose": purpose,
             },
             conn=conn,

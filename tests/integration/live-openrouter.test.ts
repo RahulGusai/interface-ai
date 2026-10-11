@@ -3,7 +3,7 @@ import { randomBytes } from "node:crypto";
 import { runTask } from "../../src/runtime/run-task.js";
 import { OpenRouterClient } from "../../src/llm/openrouter-client.js";
 import { loadOpenRouterConfig } from "../../src/runtime/config.js";
-import { createBrowserFactory } from "../../src/adapters/factory.js";
+import { createBrowserFactory } from "../helpers/fixture-browser-factory.js";
 import { syntheticContract } from "../../src/demo/synthetic-contract.js";
 import { startFixture } from "../helpers/fixture-server.js";
 const live =

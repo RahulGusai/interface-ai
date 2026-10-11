@@ -1,4 +1,14 @@
 import {
+  accessDecision,
+  intrinsicClassification,
+  sameHostname,
+  violationResponse,
+  type Classification,
+  type PolicyViolation,
+} from "../../runtime/action-policy.js";
+import { classifyTargetAction } from "./action-rules.js";
+import { installNavigationPolicy } from "./navigation-policy.js";
+import {
   chromium,
   type Browser,
   type BrowserContext,
@@ -47,6 +57,23 @@ export class BrowserAdapter implements BrowserAdapterPort {
     "check_ui",
     "extract_data",
   ]);
+  private violation?: PolicyViolation;
+  private readonly policyController = new AbortController();
+  get policySignal() {
+    return this.policyController.signal;
+  }
+  private breach(violation: PolicyViolation) {
+    if (this.violation) return;
+    this.violation = violation;
+    this.policyController.abort(violation);
+    this.state.blocked = { kind: "policy", message: violation.reason };
+    this.state.notify();
+    // Stop page scripts and pending input as soon as a breach is known.
+    void this.context.close().catch(() => {});
+  }
+  policyViolation() {
+    return this.violation;
+  }
   private bindings = new Map<string, Binding>();
   private observationId = "";
   private observedGeneration = -1;
@@ -76,14 +103,45 @@ export class BrowserAdapter implements BrowserAdapterPort {
       const context = await browser.newContext({
         viewport: config.viewport,
         deviceScaleFactor: config.deviceScaleFactor,
-        serviceWorkers: "allow",
+        serviceWorkers: config.runPolicy ? "block" : "allow",
         acceptDownloads: true,
       });
       const page = await context.newPage();
       page.setDefaultTimeout(config.actionMs);
       page.setDefaultNavigationTimeout(config.navigationMs);
       const adapter = new BrowserAdapter(browser, context, page, config);
-      installEvents(context, page, adapter.state);
+      installEvents(
+        context,
+        page,
+        adapter.state,
+        config.runPolicy
+          ? () =>
+              adapter.breach({
+                code: "ACCESS_POLICY_VIOLATION",
+                access_policy: config.runPolicy!.accessPolicy,
+                category: "unknown",
+                reason: "Native dialog has no trusted effect rule",
+                dispatch_state: "uncertain",
+              })
+          : undefined,
+      );
+      if (config.runPolicy)
+        await installNavigationPolicy(
+          context,
+          page,
+          new URL(config.runPolicy.baseUrl).hostname,
+          config.runPolicy.accessPolicy,
+          (v) => {
+            adapter.breach(v);
+          },
+          () => {
+            adapter.state.blocked = {
+              kind: "intervention",
+              message: "Additional pages are unsupported",
+            };
+            adapter.state.notify();
+          },
+        );
       return adapter;
     } catch (e) {
       await browser.close();
@@ -256,7 +314,67 @@ export class BrowserAdapter implements BrowserAdapterPort {
     }
     return { observation: failedObservation() };
   }
+  async classifyAction(action: BrowserAction): Promise<Classification> {
+    const intrinsic = intrinsicClassification(action);
+    if (intrinsic) return intrinsic;
+    const target =
+      "target" in action.input && action.input.target
+        ? await resolve(
+            this.page,
+            this.bindings,
+            action.input.target,
+            this.signature,
+          )
+        : undefined;
+    return this.classifyResolved(action, target);
+  }
+  private async classifyResolved(
+    action: BrowserAction,
+    target?: Resolved,
+  ): Promise<Classification> {
+    if (
+      action.name === "navigate" &&
+      this.options.runPolicy &&
+      new URL(action.input.url).href ===
+        new URL(this.options.runPolicy.baseUrl).href
+    )
+      return { category: "read", reason: "Configured deployment entry page" };
+    return classifyTargetAction(
+      action,
+      action.name === "navigate" ? action.input.url : this.page.url(),
+      target,
+      this.options.trustedActionRules ?? [],
+    );
+  }
+  private async enforce(action: BrowserAction, target?: Resolved) {
+    const policy = this.options.runPolicy;
+    if (!policy) return;
+    if (this.violation)
+      throw new SafeError(this.violation.code, this.violation.reason);
+    if (
+      action.name === "navigate" &&
+      !sameHostname(action.input.url, new URL(policy.baseUrl).hostname)
+    ) {
+      this.breach({
+        code: "DOMAIN_POLICY_VIOLATION",
+        access_policy: policy.accessPolicy,
+        category: "unknown",
+        reason: "Page navigation must remain on the deployment hostname",
+        dispatch_state: "not_dispatched",
+      });
+    } else {
+      const denied = accessDecision(
+        policy.accessPolicy,
+        intrinsicClassification(action) ??
+          (await this.classifyResolved(action, target)),
+      );
+      if (denied) this.breach(denied);
+    }
+    const violation = this.policyViolation();
+    if (violation) throw new SafeError(violation.code, violation.reason);
+  }
   async execute(action: BrowserAction): Promise<ToolResponse> {
+    if (this.violation) return violationResponse(this.violation);
     if (this.busy || this.poisoned || this.state.blocked)
       return {
         result: {
@@ -356,6 +474,7 @@ export class BrowserAdapter implements BrowserAdapterPort {
         fields.status === "completed"
       )
         fields.status = "uncertain";
+      if (this.violation) return violationResponse(this.violation);
       const raw = {
         ...fields,
         observation: capture.observation,
@@ -436,6 +555,7 @@ export class BrowserAdapter implements BrowserAdapterPort {
     generation: number,
   ): Promise<Record<string, unknown>> {
     if (action.name === "navigate") {
+      await this.enforce(action);
       await this.page.goto(action.input.url, {
         waitUntil: "domcontentloaded",
         timeout: this.options.navigationMs,
@@ -519,6 +639,7 @@ export class BrowserAdapter implements BrowserAdapterPort {
         action.input.target,
         this.signature,
       );
+    await this.enforce(action, target);
     this.observationId = "";
     if (action.name === "click") {
       await click(this.page, target!, this.options.actionMs);

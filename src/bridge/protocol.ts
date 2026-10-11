@@ -4,6 +4,7 @@ const common = { protocol_version: z.literal(1), run_id: z.string().uuid() };
 export const startSchema = z.strictObject({
   ...common,
   type: z.literal("start"),
+  access_policy: z.enum(["READ_ONLY", "READ_WRITE"]).default("READ_ONLY"),
   mode: z.enum(["discovery", "replay"]),
   deployment: z
     .object({

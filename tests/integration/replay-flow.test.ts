@@ -1,7 +1,7 @@
 import { it, expect } from "vitest";
 import { readFile } from "node:fs/promises";
 import { startFixture } from "../helpers/fixture-server.js";
-import { createBrowserFactory } from "../../src/adapters/factory.js";
+import { createBrowserFactory } from "../helpers/fixture-browser-factory.js";
 import { runReplay } from "../../src/replay/run-replay.js";
 const definition = JSON.parse(
   await readFile(

@@ -284,6 +284,15 @@ export const dispatchErrorSchema = z.strictObject({
   status: z.enum(["error", "policy_blocked", "needs_intervention"]),
   code: z.string(),
   message: z.string(),
+  policy: z
+    .strictObject({
+      code: z.enum(["ACCESS_POLICY_VIOLATION", "DOMAIN_POLICY_VIOLATION"]),
+      access_policy: z.enum(["READ_ONLY", "READ_WRITE"]),
+      category: z.enum(["read", "mutation", "unknown", "control"]),
+      reason: z.string(),
+      dispatch_state: z.enum(["not_dispatched", "uncertain"]),
+    })
+    .optional(),
 });
 export type ToolResult =
   | z.infer<(typeof toolResultSchemas)[ToolName]>

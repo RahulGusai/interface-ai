@@ -17,7 +17,11 @@ cp .env.example .env
 
 Configure the existing private MinIO bucket's internal S3 endpoint, externally reachable S3 signing endpoint, region and server-only credentials. The service verifies the bucket and its policy; it creates no bucket. Read/catalog endpoints remain usable when model/storage configuration is absent; `/health/ready` reports separate discovery and replay availability. Missing configuration never enables a fake runner or local object-store fallback.
 
-The backend has no runtime policy evaluation or policy environment variables. Discovery always starts at the registered app deployment's URL. All supported browser tools, subsequent destinations, resources, frames and screenshots are available; native dialogs are accepted automatically. No navigation/network guard is installed, so redirects, third-party resources and WebSockets are unrestricted. Service workers and browser downloads are enabled. Tool schemas, reference validity, operation timeouts and artifact/output contracts still validate execution. The adapter supports one page per run. Keep credentials out of task text and browser configuration.
+Every run has `access_policy: "READ_ONLY" | "READ_WRITE"`, defaulting to `READ_ONLY`. The backend validates and persists it and passes it to discovery and replay; saved artifacts cannot grant permissions. Page navigation stays on the exact hostname of the deployment's snapshotted `base_url` (subdomains differ; ports do not). Redirect hops and link navigation are checked before off-host document requests. External assets can load. Service workers are disabled for policy runs; additional pages are blocked before their initial document request.
+
+Rendered inspection and runtime control actions are allowed. Application interactions require code-owned rules scoped to the current origin, route, action, target selector and, where necessary, arguments. Known business-data mutations require `READ_WRITE`; unknown effects fail under both policies. Labels, page-provided categories and artifact metadata cannot authorize actions. Rejections are audited and terminate the run with `ACCESS_POLICY_VIOLATION` or `DOMAIN_POLICY_VIOLATION`; failed discovery creates no artifact. Operator handoff remains deferred.
+
+**Current integration limitation:** the production runner has no reviewed application interaction rules installed. It can inspect the entry page, but search, profile navigation and editing must be explicitly integrated before production use. `READ_WRITE` does not bypass unknown-action rejection. See [run policy integration](docs/run-policy.md) for the small trusted-rule extension and local browser evidence. The low-level `BrowserAdapter.create()` without `runPolicy` is used only for adapter mechanics tests; application runs must use `createBrowserFactory()`.
 
 ```sh
 PYTHONPATH=backend backend/.venv/bin/uvicorn interface_api.main:app --host 127.0.0.1 --port 8000 --workers 1
@@ -38,7 +42,12 @@ curl -sS http://127.0.0.1:8000/v1/app-deployments -H 'Content-Type: application/
 Copy its deployment UUID into the discovery request. Generate a request key with `python3 -c 'import uuid; print(uuid.uuid4())'`.
 
 ```json
-{"kind":"discovery","app_deployment_id":"<deployment UUID>","task":"Look up synthetic member demo@example.test and report the displayed status"}
+{
+  "kind": "discovery",
+  "app_deployment_id": "<deployment UUID>",
+  "task": "Inspect the entry page",
+  "access_policy": "READ_ONLY"
+}
 ```
 
 POST it to `/v1/runs` with `Content-Type: application/json` and the key header. Poll the returned run ID and `/v1/runs/{id}/events?after_sequence=0`. Follow `next_after_sequence` until `has_more=false`, even when a type-filtered page has no items.
@@ -52,7 +61,12 @@ The draft represents the exact recorded run; arguments are not automatically par
 After publication, use the exact artifact UUID:
 
 ```json
-{"kind":"replay","app_deployment_id":"<deployment UUID>","artifact_id":"<published artifact UUID>","inputs":{}}
+{
+  "kind": "replay",
+  "app_deployment_id": "<deployment UUID>",
+  "artifact_id": "<published artifact UUID>",
+  "inputs": {}
+}
 ```
 
 POST `/v1/runs` with a new request key and the inputs declared by that artifact. Runtime-built drafts replay their recorded argument values. Inputs are validated before admission. `/v1/capabilities/{id}/invoke` selects the current ready binding and freezes its artifact/version/configuration on admission.

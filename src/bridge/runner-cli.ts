@@ -111,7 +111,11 @@ async function execute(c: ReturnType<typeof startSchema.parse>) {
       model: process.env.OPENROUTER_MODEL ?? "",
     });
     result = await runTask(
-      { goal: c.task, targetUrl: c.deployment.base_url },
+      {
+        goal: c.task,
+        targetUrl: c.deployment.base_url,
+        accessPolicy: c.access_policy,
+      },
       { model, adapterFactory: factory },
       {
         discovery,
@@ -124,6 +128,9 @@ async function execute(c: ReturnType<typeof startSchema.parse>) {
             payload.call_id = record.call.id;
             payload.tool = record.call.name;
             payload.dispatch_state =
+              (record.type === "tool_finished" &&
+                record.result.status === "policy_blocked" &&
+                record.result.policy?.dispatch_state === "not_dispatched") ||
               record.type === "tool_started"
                 ? "not_dispatched"
                 : record.type === "tool_finished" &&

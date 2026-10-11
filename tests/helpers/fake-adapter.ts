@@ -32,6 +32,13 @@ export function makeFakeAdapter() {
       return closed;
     },
     capture,
+    async classifyAction() {
+      return {
+        category: "read" as const,
+        reason:
+          "Trusted in-memory test adapter: actions only update synthetic observations",
+      };
+    },
     isCurrentObservation: (id: string) => id === current,
     async execute(action: BrowserAction) {
       calls.push(action);

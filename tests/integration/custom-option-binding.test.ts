@@ -2,7 +2,7 @@ import { it, expect } from "vitest";
 import { BrowserAdapter } from "../../src/adapters/browser/browser-adapter.js";
 import { runTask } from "../../src/runtime/run-task.js";
 import { runReplay } from "../../src/replay/run-replay.js";
-import { createBrowserFactory } from "../../src/adapters/factory.js";
+import { createBrowserFactory } from "../helpers/fixture-browser-factory.js";
 import { lastObservation } from "../../src/demo/scripted-model.js";
 import type { DiscoveryContext } from "../../src/runtime/discovery-context.js";
 import { chromium } from "playwright";

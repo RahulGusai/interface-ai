@@ -10,7 +10,7 @@ def test_database_is_transactional_and_only_eight_tables(tmp_path):
     db = Database(tmp_path / "data" / "test.sqlite3")
     db.migrate()
     with db.connect() as c:
-        assert c.execute("PRAGMA user_version").fetchone()[0] == 2
+        assert c.execute("PRAGMA user_version").fetchone()[0] == 3
         assert c.execute("PRAGMA foreign_keys").fetchone()[0] == 1
         names = {
             r[0] for r in c.execute("SELECT name FROM sqlite_master WHERE type='table'")
@@ -69,12 +69,19 @@ def test_upgrade_preserves_published_runs_bindings_and_guards(tmp_path, monkeypa
     with db.connect() as c:
         c.executescript(sql)
         c.execute("PRAGMA user_version=1")
+    # Helpers now write policy; create seed using current schema, then remove only
+    # the new column to reconstruct a populated v1 database before the upgrade.
+    with db.connect() as c:
+        c.execute(
+            "ALTER TABLE runs ADD COLUMN access_policy TEXT NOT NULL DEFAULT 'READ_ONLY'"
+        )
     repo = Repository(db)
     life, source, artifact, validation = bundle(repo, tmp_path)
     life.publish_validated(
         source["run_id"], artifact["artifact_id"], validation["run_id"]
     )
     with db.connect() as c:
+        c.execute("ALTER TABLE runs DROP COLUMN access_policy")
         tables = [
             row[0]
             for row in c.execute("SELECT name FROM sqlite_master WHERE type='table'")
@@ -106,12 +113,19 @@ def test_upgrade_preserves_published_runs_bindings_and_guards(tmp_path, monkeypa
         assert {
             name: list(c.execute(f"SELECT * FROM {name}")) for name in tables
         } == before
-    assert db.migrate() == 2
+    assert db.migrate() == 3
     db.migrate()
     with db.connect() as c:
         assert {
-            name: list(c.execute(f"SELECT * FROM {name}")) for name in tables
-        } == before
+            name: [
+                tuple(row)[:-1] if name == "runs" else tuple(row)
+                for row in c.execute(f"SELECT * FROM {name}")
+            ]
+            for name in tables
+        } == {name: [tuple(row) for row in rows] for name, rows in before.items()}
+        assert all(
+            row[0] == "READ_ONLY" for row in c.execute("SELECT access_policy FROM runs")
+        )
         assert not c.execute("PRAGMA foreign_key_check").fetchall()
         assert c.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
         assert {

@@ -2,9 +2,14 @@ import { it, expect } from "vitest";
 import { dispatchTool } from "../../src/runtime/dispatch.js";
 import { makeFakeAdapter } from "../helpers/fake-adapter.js";
 
-it("validates tool arguments without a policy evaluator", async () => {
+it("validates tool arguments before policy evaluation", async () => {
   const adapter = makeFakeAdapter();
-  const context = { adapter, busy: false, halted: false };
+  const context = {
+    adapter,
+    busy: false,
+    halted: false,
+    allowedHostname: "other.example",
+  };
   for (const [name, argumentsJson] of [
     ["unknown", "{}"],
     ["click", "{"],

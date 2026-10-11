@@ -122,7 +122,12 @@ class Services:
                             artifact["definition"]["input_schema"], inputs
                         )
                         return self.lifecycle.start_validation(
-                            validation_artifact, inputs, key, request_hash, conn=c
+                            validation_artifact,
+                            inputs,
+                            key,
+                            request_hash,
+                            conn=c,
+                            access_policy=request.get("access_policy", "READ_ONLY"),
                         )
                     if capability_id:
                         self.repo.get("capabilities", "capability_id", capability_id, c)
@@ -181,6 +186,7 @@ class Services:
                         selection=selection,
                         key=key,
                         request_hash=request_hash,
+                        access_policy=request.get("access_policy", "READ_ONLY"),
                     )
 
             run = await asyncio.to_thread(create)

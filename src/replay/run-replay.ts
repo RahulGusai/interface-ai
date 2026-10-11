@@ -38,7 +38,8 @@ export async function runReplay(
   command: Pick<
     StartCommand,
     "artifact" | "inputs" | "deployment" | "assets" | "staging_directory"
-  >,
+  > &
+    Partial<Pick<StartCommand, "access_policy">>,
   deps: { adapterFactory: BrowserAdapterFactory },
   options: { signal?: AbortSignal; onAudit: ReplayAudit },
 ): Promise<ReplayResult> {
@@ -47,24 +48,43 @@ export async function runReplay(
   let dispatchState: ReplayResult["dispatch_state"] = "not_dispatched";
   let stage: ReplayResult["failure_stage"] = "readiness";
   let definition: ArtifactDefinition;
-  const outcome = (
+  const outcome = async (
     status: ReplayResult["status"],
     code: string,
     message: string,
     outputs: Record<string, unknown> | null = null,
     expected: unknown = null,
     observed: unknown = null,
-  ): ReplayResult => ({
-    status,
-    code,
-    message,
-    outputs,
-    failure_stage: status === "hard_failure" ? stage : null,
-    step_id: stepId,
-    expected,
-    observed,
-    dispatch_state: dispatchState,
-  });
+  ): Promise<ReplayResult> => {
+    // Quiesce every terminal path, including business outcomes, before choosing
+    // the result. Closing in finally alone happens after return-value selection.
+    if (adapter) await adapter.close();
+    const violation = adapter?.policyViolation?.();
+    if (violation) {
+      await options.onAudit(
+        "policy_violation",
+        { violation },
+        undefined,
+        stepId,
+      );
+      status = "hard_failure";
+      code = violation.code;
+      message = violation.reason;
+      outputs = null;
+      dispatchState = violation.dispatch_state;
+    }
+    return {
+      status,
+      code,
+      message,
+      outputs,
+      failure_stage: status === "hard_failure" ? stage : null,
+      step_id: stepId,
+      expected,
+      observed,
+      dispatch_state: dispatchState,
+    };
+  };
   const audit = options.onAudit,
     assets = new Map<string, Buffer>();
   try {
@@ -96,9 +116,12 @@ export async function runReplay(
     adapter = await deps.adapterFactory.createForTask({
       goal: "Execute pinned artifact",
       targetUrl: command.deployment.base_url,
+      accessPolicy: command.access_policy ?? "READ_ONLY",
     });
     const context: DispatchContext = {
       adapter,
+      accessPolicy: command.access_policy ?? "READ_ONLY",
+      allowedHostname: new URL(command.deployment.base_url).hostname,
       busy: false,
       halted: false,
     };
@@ -132,6 +155,9 @@ export async function runReplay(
       ].includes(response.result.status)
         ? "completed"
         : "uncertain";
+      if (response.result.status === "policy_blocked")
+        dispatchState =
+          response.result.policy?.dispatch_state ?? "not_dispatched";
       await audit(
         "tool_finished",
         {
@@ -143,9 +169,20 @@ export async function runReplay(
         response.image,
         id,
       );
+      if (response.result.status === "policy_blocked")
+        throw Error(response.result.code);
       return response;
     };
-    const fresh = () => adapter!.capture("both");
+    const assertPolicy = () => {
+      const v = adapter!.policyViolation?.();
+      if (v) throw Error(v.code);
+    };
+    const fresh = async () => {
+      assertPolicy();
+      const shot = await adapter!.capture("both");
+      assertPolicy();
+      return shot;
+    };
     const checkAll = async (
       checks: any[],
       id: string | null,
@@ -346,7 +383,7 @@ export async function runReplay(
         );
         if (success.every((v) => v.verdict === "pass"))
           throw Error("RESULT_AMBIGUOUS");
-        return outcome(
+        return await outcome(
           "expected_outcome",
           b.code,
           b.message,
@@ -369,7 +406,8 @@ export async function runReplay(
         c.environment,
       ),
     );
-    return outcome(
+    assertPolicy();
+    return await outcome(
       "success",
       "GOAL_ACHIEVED",
       "Saved flow completed with verified checks",
@@ -377,8 +415,12 @@ export async function runReplay(
     );
   } catch (error) {
     if (options.signal?.aborted)
-      return outcome("cancelled", "USER_CANCELLED", "Execution cancelled");
-    return outcome(
+      return await outcome(
+        "cancelled",
+        "USER_CANCELLED",
+        "Execution cancelled",
+      );
+    return await outcome(
       "hard_failure",
       error instanceof Error ? error.message : "REPLAY_FAILED",
       "Saved flow could not be verified",

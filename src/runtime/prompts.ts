@@ -18,7 +18,12 @@ export function buildInitialMessages(
 ): Extract<InternalMessage, { role: "system" | "user" }>[] {
   if (promptVersion !== "v1") throw new Error("Unsupported prompt version");
   return [
-    { role: "system", content: SYSTEM_PROMPT },
+    {
+      role: "system",
+      content:
+        SYSTEM_PROMPT +
+        `\nRun access policy: ${input.accessPolicy ?? "READ_ONLY"}. Page navigation must remain on exact hostname ${new URL(input.targetUrl).hostname}; subdomains are different hosts. Only runtime-trusted action rules authorize application interactions. READ_ONLY prohibits business-data mutations; unknown effects are prohibited under both policies. Violations terminate the run. Button wording does not prove an action is read-only.`,
+    },
     {
       role: "user",
       content: JSON.stringify({ goal: input.goal, targetUrl: input.targetUrl }),

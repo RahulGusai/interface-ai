@@ -1,3 +1,10 @@
+import {
+  accessDecision,
+  intrinsicClassification,
+  sameHostname,
+  violationResponse,
+  type AccessPolicy,
+} from "./action-policy.js";
 import { parseToolAction, type ToolResponse } from "../contracts/tools.js";
 import type { ToolCall } from "../contracts/run.js";
 import type { BrowserAdapterPort } from "../adapters/surface.js";
@@ -8,6 +15,8 @@ import { toolValidationMessage } from "./validation-feedback.js";
 import { executeTool } from "../tools/registry.js";
 export type DispatchContext = {
   adapter: BrowserAdapterPort;
+  accessPolicy?: AccessPolicy;
+  allowedHostname?: string;
   contract?: TaskContract;
   busy: boolean;
   halted: boolean;
@@ -28,6 +37,11 @@ export async function dispatchTool(
         message: toolValidationMessage(error),
       },
     };
+  }
+  const pendingViolation = context.adapter.policyViolation?.();
+  if (pendingViolation) {
+    context.halted = true;
+    return violationResponse(pendingViolation);
   }
   if (context.busy || context.halted)
     return {
@@ -50,6 +64,33 @@ export async function dispatchTool(
     };
   context.busy = true;
   try {
+    const policy = context.accessPolicy ?? "READ_ONLY";
+    if (
+      action.name === "navigate" &&
+      (!context.allowedHostname ||
+        !sameHostname(action.input.url, context.allowedHostname))
+    ) {
+      context.halted = true;
+      return violationResponse({
+        code: "DOMAIN_POLICY_VIOLATION",
+        access_policy: policy,
+        category: "unknown",
+        reason: "Page navigation must remain on the deployment hostname",
+        dispatch_state: "not_dispatched",
+      });
+    }
+    const classification = intrinsicClassification(action) ??
+      (action.name !== "finish_task" && action.name !== "request_human"
+        ? await context.adapter.classifyAction?.(action)
+        : undefined) ?? {
+        category: "unknown" as const,
+        reason: "No trusted rule for the current action and target",
+      };
+    const violation = accessDecision(policy, classification);
+    if (violation) {
+      context.halted = true;
+      return violationResponse(violation);
+    }
     const response: ToolResponse =
       action.name === "request_human"
         ? { result: requestIntervention(context) }
@@ -58,6 +99,12 @@ export async function dispatchTool(
               result: finalize(action.input, context.contract ?? {}),
             }
           : await executeTool(context.adapter, action);
+    if (response.result.status === "policy_blocked") context.halted = true;
+    const after = context.adapter.policyViolation?.();
+    if (after) {
+      context.halted = true;
+      return violationResponse(after);
+    }
     if (
       response.result.status === "needs_intervention" ||
       ("blocker" in response.result &&

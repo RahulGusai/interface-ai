@@ -23,4 +23,10 @@ export const browserDefaults = {
   semanticCapture: true,
   slowMo: 0,
 };
-export type BrowserOptions = typeof browserDefaults;
+export type BrowserOptions = typeof browserDefaults & {
+  runPolicy?: {
+    baseUrl: string;
+    accessPolicy: import("./action-policy.js").AccessPolicy;
+  };
+  trustedActionRules?: readonly import("../adapters/browser/action-rules.js").TrustedActionRule[];
+};

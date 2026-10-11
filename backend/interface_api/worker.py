@@ -178,6 +178,7 @@ class Worker:
                 "type": "start",
                 "run_id": ident,
                 "mode": row["kind"],
+                "access_policy": row["access_policy"],
                 "deployment": row["deployment_snapshot"],
                 "task": row["task"],
                 "inputs": row["inputs"],

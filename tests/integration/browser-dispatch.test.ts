@@ -1,6 +1,6 @@
 import { it, expect } from "vitest";
 import { runTask } from "../../src/runtime/run-task.js";
-import { createBrowserFactory } from "../../src/adapters/factory.js";
+import { createBrowserFactory } from "../helpers/fixture-browser-factory.js";
 import { syntheticContract } from "../../src/demo/synthetic-contract.js";
 import { startFixture } from "../helpers/fixture-server.js";
 import type { AgentTurn } from "../../src/contracts/run.js";

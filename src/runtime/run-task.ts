@@ -1,3 +1,4 @@
+import { untilPolicyBreach } from "./action-policy.js";
 import { isReusableExtractionSource } from "./extraction-source.js";
 import { unusedDiscoveryInputs } from "./input-coverage.js";
 import type { DiscoveryContext } from "./discovery-context.js";
@@ -67,6 +68,7 @@ export async function runTask(
   } = {},
 ): Promise<RunResult> {
   const input: TaskInput = parseTaskInput(raw);
+  if (options.discovery) delete options.discovery.artifact;
   const contract = deps.contract ?? {};
   const budget = maxToolCalls(options.maxToolCalls);
   let used = 0;
@@ -588,6 +590,18 @@ export async function runTask(
     }
   };
   const stop = async (r: RunResult) => {
+    // No browser activity may race terminal audit or artifact publication.
+    if (context) await context.adapter.close();
+    const violation = context?.adapter.policyViolation?.();
+    if (r.status === "policy_blocked" && options.discovery)
+      delete options.discovery.artifact;
+    if (violation) {
+      r = result("policy_blocked", violation.reason, {
+        error: { code: violation.code, message: violation.reason },
+      });
+      if (options.discovery) delete options.discovery.artifact;
+      if (!auditFailed) await audit({ type: "policy_violation", violation });
+    }
     if (!auditFailed) {
       if (remainingProposals.length)
         await audit({
@@ -649,6 +663,8 @@ export async function runTask(
   try {
     await audit({
       type: "run_started",
+      accessPolicy: input.accessPolicy ?? "READ_ONLY",
+      allowedHostname: new URL(input.targetUrl).hostname,
       targetUrl: input.targetUrl,
       goal: input.goal,
       maxToolCalls: budget,
@@ -701,6 +717,8 @@ export async function runTask(
     const adapter = await deps.adapterFactory.createForTask(input);
     context = {
       adapter,
+      accessPolicy: input.accessPolicy ?? "READ_ONLY",
+      allowedHostname: new URL(input.targetUrl).hostname,
       contract,
       busy: false,
       halted: false,
@@ -737,6 +755,15 @@ export async function runTask(
       },
       "bootstrap",
     );
+    if (bootstrap.result.status === "policy_blocked")
+      return await stop(
+        result("policy_blocked", bootstrap.result.message, {
+          error: {
+            code: bootstrap.result.code,
+            message: bootstrap.result.message,
+          },
+        }),
+      );
     if (bootstrap.result.status !== "completed")
       return await stop(
         result(
@@ -781,18 +808,29 @@ export async function runTask(
       const providerStarted = performance.now();
       try {
         turn = agentTurnSchema.parse(
-          await withProviderRecovery(() =>
-            deps.model.complete(
-              context!.history.messages.map((m) => m),
-              getDefinitions(),
-              {
-                signal: options.signal,
-                ...(options.discovery ? { toolChoice: "required" } : {}),
-              },
+          await untilPolicyBreach(context.adapter.policySignal, () =>
+            withProviderRecovery(() =>
+              deps.model.complete(
+                context!.history.messages.map((m) => m),
+                getDefinitions(),
+                {
+                  signal: context!.adapter.policySignal
+                    ? AbortSignal.any([
+                        context!.adapter.policySignal,
+                        ...(options.signal ? [options.signal] : []),
+                      ])
+                    : options.signal,
+                  ...(options.discovery ? { toolChoice: "required" } : {}),
+                },
+              ),
             ),
           ),
         );
       } catch (cause) {
+        if (context.adapter.policyViolation?.())
+          return await stop(
+            result("policy_blocked", "Browser policy violation"),
+          );
         options.signal?.throwIfAborted();
         const error =
           cause instanceof SafeError
@@ -871,6 +909,15 @@ export async function runTask(
         )
           return await stop(
             result("tool_error", response.result.message, {
+              error: {
+                code: response.result.code,
+                message: response.result.message,
+              },
+            }),
+          );
+        if (response.result.status === "policy_blocked")
+          return await stop(
+            result("policy_blocked", response.result.message, {
               error: {
                 code: response.result.code,
                 message: response.result.message,

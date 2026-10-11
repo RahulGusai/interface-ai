@@ -1,7 +1,7 @@
 import { evaluateCheck } from "../../src/replay/checks.js";
 import { it, expect } from "vitest";
 import { readFile } from "node:fs/promises";
-import { createBrowserFactory } from "../../src/adapters/factory.js";
+import { createBrowserFactory } from "../helpers/fixture-browser-factory.js";
 import { startFixture } from "../helpers/fixture-server.js";
 import { resolveTarget } from "../../src/replay/targets.js";
 import { runReplay } from "../../src/replay/run-replay.js";

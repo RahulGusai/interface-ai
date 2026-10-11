@@ -2466,6 +2466,12 @@
       },
       "DiscoveryStart": {
         "properties": {
+          "access_policy": {
+            "type": "string",
+            "enum": ["READ_ONLY", "READ_WRITE"],
+            "title": "Access Policy",
+            "default": "READ_ONLY"
+          },
           "kind": {
             "type": "string",
             "const": "discovery",
@@ -2638,6 +2644,12 @@
       },
       "InvokeRequest": {
         "properties": {
+          "access_policy": {
+            "type": "string",
+            "enum": ["READ_ONLY", "READ_WRITE"],
+            "title": "Access Policy",
+            "default": "READ_ONLY"
+          },
           "app_deployment_id": {
             "type": "string",
             "format": "uuid",
@@ -2964,6 +2976,12 @@
       },
       "ReplayStart": {
         "properties": {
+          "access_policy": {
+            "type": "string",
+            "enum": ["READ_ONLY", "READ_WRITE"],
+            "title": "Access Policy",
+            "default": "READ_ONLY"
+          },
           "kind": {
             "type": "string",
             "const": "replay",
@@ -2992,6 +3010,11 @@
       },
       "RunDTO": {
         "properties": {
+          "access_policy": {
+            "type": "string",
+            "enum": ["READ_ONLY", "READ_WRITE"],
+            "title": "Access Policy"
+          },
           "run_id": {
             "type": "string",
             "title": "Run Id"
@@ -3218,6 +3241,7 @@
         "additionalProperties": false,
         "type": "object",
         "required": [
+          "access_policy",
           "run_id",
           "kind",
           "purpose",
@@ -3339,6 +3363,12 @@
       },
       "ValidateRequest": {
         "properties": {
+          "access_policy": {
+            "type": "string",
+            "enum": ["READ_ONLY", "READ_WRITE"],
+            "title": "Access Policy",
+            "default": "READ_ONLY"
+          },
           "app_deployment_id": {
             "type": "string",
             "format": "uuid",

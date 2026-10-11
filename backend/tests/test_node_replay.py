@@ -15,7 +15,10 @@ from interface_api.evidence import Evidence
 
 
 @pytest.mark.asyncio
-async def test_node_replay_persists_real_png_before_ack(repo, tmp_path):
+@pytest.mark.parametrize("policy", ["READ_ONLY", "READ_WRITE"])
+async def test_node_replay_persists_real_png_and_rejects_unknown_effects(
+    repo, tmp_path, policy
+):
     html = (REPO_ROOT / "tests/fixtures/replay-member-desk/index.html").read_bytes()
 
     class Fixture(BaseHTTPRequestHandler):
@@ -57,6 +60,7 @@ async def test_node_replay_persists_real_png_before_ack(repo, tmp_path):
                 artifact=artifact,
                 inputs={"email": "other@example.test"},
                 selection="explicit_artifact",
+                access_policy=policy,
             )
         repo.transition(run["run_id"], "running")
         sdk = SDK()
@@ -70,6 +74,7 @@ async def test_node_replay_persists_real_png_before_ack(repo, tmp_path):
             "type": "start",
             "run_id": run["run_id"],
             "mode": "replay",
+            "access_policy": run["access_policy"],
             "deployment": run["deployment_snapshot"],
             "task": None,
             "inputs": run["inputs"],
@@ -96,11 +101,22 @@ async def test_node_replay_persists_real_png_before_ack(repo, tmp_path):
             return {"event_sequence": row["sequence"], "continue": True}
 
         completion = await runner.run(command, sink, asyncio.Event())
-        assert completion["runtime_result"]["status"] == "success", completion
-        assert completion["runtime_result"]["outputs"] == {"status": "Pending"}
+        assert completion["runtime_result"]["status"] == "hard_failure", completion
+        assert completion["runtime_result"]["code"] == "ACCESS_POLICY_VIOLATION"
+        assert completion["runtime_result"]["dispatch_state"] == "not_dispatched"
+        assert completion["runtime_result"]["outputs"] is None
         assets = repo.rows("evidence_assets", order="event_sequence")
         assert assets and all(a["width"] == 1280 and a["height"] == 800 for a in assets)
         events = repo.rows("run_events", "run_id=?", (run["run_id"],), "sequence ASC")
+        rejected = [
+            e
+            for e in events
+            if e["type"] == "tool_finished"
+            and e["payload"]["result"]["status"] == "policy_blocked"
+        ]
+        assert len(rejected) == 1
+        assert rejected[0]["payload"]["result"]["policy"]["access_policy"] == policy
+        assert rejected[0]["payload"]["result"]["policy"]["category"] == "unknown"
         assert [e["sequence"] for e in events] == list(range(1, len(events) + 1))
         assert not list(staging.glob("*.png")) and not any(
             "model_proposed" == e["type"] for e in events

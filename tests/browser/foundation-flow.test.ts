@@ -1,6 +1,6 @@
 import { it, expect } from "vitest";
 import { BrowserAdapter } from "../../src/adapters/browser/browser-adapter.js";
-import { dispatchTool } from "../../src/runtime/dispatch.js";
+import { parseToolAction } from "../../src/contracts/tools.js";
 import { startFixture } from "../helpers/fixture-server.js";
 import type { ToolResponse } from "../../src/contracts/tools.js";
 import type { Observation } from "../../src/contracts/observation.js";
@@ -20,14 +20,12 @@ const ctrl = (o: Extract<Observation, { status: "ok" }>, name: string) => {
 it("real Chromium: semantic entry, single keyboard activation, check/extract, point fallback, selection, stale refs, scroll and dialogs", async () => {
   const fixture = await startFixture();
   const a = await BrowserAdapter.create({ headless: true });
-  const context = { adapter: a, busy: false, halted: false };
-  let n = 0;
-  const send = (name: string, input: unknown) =>
-    dispatchTool(context, {
-      id: String(++n),
-      name,
-      argumentsJson: JSON.stringify(input),
-    });
+  const send = (name: string, input: unknown) => {
+    const action = parseToolAction(name, input);
+    if (action.name === "finish_task" || action.name === "request_human")
+      throw Error("Browser tool required");
+    return a.execute(action);
+  };
   try {
     let o = observation(await send("navigate", { url: fixture.url }));
     expect(o.screenshot.status).toBe("available");
@@ -134,7 +132,6 @@ it("real Chromium: semantic entry, single keyboard activation, check/extract, po
       status: "completed",
       dialog_events: [{ decision: "accept", action: "accepted" }],
     });
-    expect(context.halted).toBe(false);
     expect((await send("observe_ui", { mode: "both" })).result.status).toBe(
       "ok",
     );

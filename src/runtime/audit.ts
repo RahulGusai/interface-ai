@@ -14,6 +14,10 @@ import type { CapabilityMetadata } from "./capability-metadata.js";
 
 export type AuditRecord =
   | {
+      type: "policy_violation";
+      violation: import("./action-policy.js").PolicyViolation;
+    }
+  | {
       type: "discovery_correction";
       modelTurn: number;
       code: string;
@@ -26,6 +30,8 @@ export type AuditRecord =
     }
   | {
       type: "run_started";
+      accessPolicy?: import("./action-policy.js").AccessPolicy;
+      allowedHostname?: string;
       targetUrl: string;
       goal: string;
       maxToolCalls: number;

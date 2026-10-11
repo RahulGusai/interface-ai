@@ -3,7 +3,7 @@ import { it, expect } from "vitest";
 import { readFile } from "node:fs/promises";
 import { runTask } from "../../src/runtime/run-task.js";
 import { syntheticContract } from "../../src/demo/synthetic-contract.js";
-import { createBrowserFactory } from "../../src/adapters/factory.js";
+import { createBrowserFactory } from "../helpers/fixture-browser-factory.js";
 import { startFixture } from "../helpers/fixture-server.js";
 import { lastObservation } from "../../src/demo/scripted-model.js";
 import type { ModelClient } from "../../src/llm/model-client.js";

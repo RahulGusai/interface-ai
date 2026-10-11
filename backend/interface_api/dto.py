@@ -70,6 +70,7 @@ class CapabilityDTO(DTO):
 
 
 class DiscoveryStart(DTO):
+    access_policy: Literal["READ_ONLY", "READ_WRITE"] = "READ_ONLY"
     kind: Literal["discovery"]
     app_deployment_id: UUID
     task: str = Field(min_length=1)
@@ -84,6 +85,7 @@ class DiscoveryStart(DTO):
 
 
 class ReplayStart(DTO):
+    access_policy: Literal["READ_ONLY", "READ_WRITE"] = "READ_ONLY"
     kind: Literal["replay"]
     app_deployment_id: UUID
     artifact_id: UUID
@@ -129,6 +131,7 @@ class ProgressDTO(DTO):
 
 
 class RunDTO(DTO):
+    access_policy: Literal["READ_ONLY", "READ_WRITE"]
     run_id: str
     kind: Literal["discovery", "replay"]
     purpose: Literal["user", "validation"]
@@ -183,6 +186,7 @@ class Page(DTO, Generic[T]):
 
 
 class ValidateRequest(DTO):
+    access_policy: Literal["READ_ONLY", "READ_WRITE"] = "READ_ONLY"
     app_deployment_id: UUID
     inputs: dict[str, Any]
 

@@ -115,10 +115,29 @@ def test_starts_idempotency_http_contract_and_real_reads(
             "kind": "discovery",
             "app_deployment_id": dep["app_deployment_id"],
             "task": "An unknown natural language operation",
+            "access_policy": "READ_WRITE",
         }
         accepted = client.post("/v1/runs", json=body, headers={"Idempotency-Key": key})
         assert accepted.status_code == 202, accepted.text
         ident = accepted.json()["run_id"]
+        assert accepted.json()["access_policy"] == "READ_WRITE"
+        assert client.get("/v1/runs/" + ident).json()["access_policy"] == "READ_WRITE"
+        assert (
+            client.post(
+                "/v1/runs",
+                json={**body, "access_policy": "READ_ONLY"},
+                headers={"Idempotency-Key": key},
+            ).status_code
+            == 409
+        )
+        assert (
+            client.post(
+                "/v1/runs",
+                json={**body, "access_policy": "ADMIN"},
+                headers={"Idempotency-Key": str(uuid4())},
+            ).status_code
+            == 422
+        )
         assert (
             client.post("/v1/runs", json=body, headers={"Idempotency-Key": key}).json()[
                 "run_id"

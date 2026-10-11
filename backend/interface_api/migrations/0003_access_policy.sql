@@ -1,0 +1,1 @@
+ALTER TABLE runs ADD COLUMN access_policy TEXT NOT NULL DEFAULT 'READ_ONLY' CHECK (access_policy IN ('READ_ONLY','READ_WRITE'));

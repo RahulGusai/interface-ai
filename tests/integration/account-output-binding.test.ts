@@ -1,6 +1,6 @@
 import { it, expect } from "vitest";
 import { runTask } from "../../src/runtime/run-task.js";
-import { createBrowserFactory } from "../../src/adapters/factory.js";
+import { createBrowserFactory } from "../helpers/fixture-browser-factory.js";
 import { startFixture } from "../helpers/fixture-server.js";
 import { lastObservation } from "../../src/demo/scripted-model.js";
 import { projectMessages } from "../../src/runtime/history.js";
