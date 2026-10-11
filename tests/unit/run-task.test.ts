@@ -481,3 +481,61 @@ it("bounds empty-response retries and retains the terminal diagnostic", async ()
   expect(result.error?.code).toBe("PROVIDER_EMPTY_RESPONSE");
   expect(s.requests).toHaveLength(3);
 });
+it("READ_WRITE finish accepts execution metadata without leaking it into outputs", async () => {
+  const s = setup([
+    batch([
+      call("done", "finish_task", {
+        outcome: "goal_achieved",
+        summary: "Done",
+        outputs: {},
+        execution: {
+          decision: "auto_approve",
+          confidence: 1,
+          reason: "Report verified outcome",
+        },
+      }),
+    ]),
+  ]);
+  const r = await runTask(
+    { ...input, accessPolicy: "READ_WRITE" },
+    { ...s.deps, contract: {} },
+  );
+  expect(r.status).toBe("goal_achieved");
+  expect(r.outputs).toEqual({});
+});
+it("preserves rejection code and stops the discovery loop before another model call", async () => {
+  const s = setup([
+    batch([
+      call("review", "request_human", {
+        observation_id: "obs_1",
+        reason: "stuck",
+        message: "Review action",
+        execution: {
+          decision: "requires_human_review",
+          confidence: 1,
+          reason: "Needs judgment",
+        },
+      }),
+    ]),
+  ]);
+  const create = s.deps.adapterFactory.createForTask;
+  s.deps.adapterFactory.createForTask = async () => {
+    const adapter = await create();
+    Object.assign(adapter, {
+      reviewSnapshot: async () => ({
+        capture: await adapter.capture(),
+        fingerprint: "a",
+      }),
+    });
+    return adapter;
+  };
+  const r = await runTask({ ...input, accessPolicy: "READ_WRITE" }, s.deps, {
+    review: async () => ({ review_id: "r", status: "rejected" }),
+  });
+  expect(r).toMatchObject({
+    status: "tool_error",
+    error: { code: "HUMAN_REVIEW_REJECTED" },
+  });
+  expect(s.requests).toHaveLength(1);
+  expect(s.adapters[0]?.closed).toBe(true);
+});

@@ -14,7 +14,8 @@ import {
   type BrowserContext,
   type Page,
 } from "playwright";
-import { randomUUID } from "node:crypto";
+import { randomUUID, createHash } from "node:crypto";
+import type { ToolAction } from "../../contracts/tools.js";
 import type { BrowserAdapterPort } from "../surface.js";
 import { browserDefaults, type BrowserOptions } from "../../runtime/config.js";
 import { validateToolResponse } from "../../runtime/tool-response.js";
@@ -57,6 +58,105 @@ export class BrowserAdapter implements BrowserAdapterPort {
     "check_ui",
     "extract_data",
   ]);
+  private readonly authorizedActions = new WeakSet<BrowserAction>();
+  authorizeReadWrite(action: BrowserAction) {
+    this.authorizedActions.add(action);
+  }
+  async reviewSnapshot(action: ToolAction) {
+    if (this.poisoned || this.state.closed || this.state.blocked)
+      throw new SafeError(
+        "REVIEW_BROWSER_UNAVAILABLE",
+        "Browser cannot be reviewed",
+      );
+    const generation = this.state.generation;
+    if (
+      "observation_id" in action.input &&
+      !this.isCurrentObservation(action.input.observation_id)
+    )
+      throw new SafeError(
+        "STALE_OBSERVATION",
+        "Review action observation is stale",
+      );
+    if ("target" in action.input && action.input.target)
+      await resolve(
+        this.page,
+        this.bindings,
+        action.input.target,
+        this.signature,
+      );
+    const state = async () =>
+      JSON.stringify({
+        layout: await layoutSignature(this.page),
+        documents: await Promise.all(
+          this.page.frames().map((frame) =>
+            frame.evaluate(() => ({
+              url: location.href,
+              text: document.body?.innerText,
+              values: Array.from(
+                document.querySelectorAll("input,textarea,select"),
+              ).map((e) => ({
+                value: (e as HTMLInputElement).value,
+                checked: (e as HTMLInputElement).checked,
+                disabled: (e as HTMLInputElement).disabled,
+              })),
+            })),
+          ),
+        ),
+      });
+    const before = await state();
+    const bytes = await this.page.screenshot({
+      type: "png",
+      scale: "css",
+      timeout: this.options.captureMs,
+    });
+    if (
+      before !== (await state()) ||
+      generation !== this.state.generation ||
+      this.state.blocked
+    )
+      throw new SafeError(
+        "REVIEW_STATE_UNSTABLE",
+        "Review screen changed while being captured",
+      );
+    if ("target" in action.input && action.input.target)
+      await resolve(
+        this.page,
+        this.bindings,
+        action.input.target,
+        this.signature,
+      );
+    const ref = randomUUID();
+    const capture: Capture = {
+      observation: {
+        status: "ok",
+        observation_id: this.observationId || `obs_${randomUUID()}`,
+        captured_at: new Date().toISOString(),
+        surface: {
+          id: "active-browser",
+          kind: "browser",
+          title: await this.page.title(),
+          url: this.page.url(),
+        },
+        screenshot: {
+          status: "available",
+          image_ref: ref,
+          ...this.options.viewport,
+        },
+        controls: {
+          status: "available",
+          items: [...this.bindings.values()].map((b) => b.control),
+        },
+      },
+      image: { ref, mimeType: "image/png", bytes },
+    };
+    return {
+      capture,
+      fingerprint: createHash("sha256")
+        .update(before)
+        .update(bytes)
+        .digest("hex"),
+    };
+  }
   private violation?: PolicyViolation;
   private readonly policyController = new AbortController();
   get policySignal() {
@@ -368,7 +468,15 @@ export class BrowserAdapter implements BrowserAdapterPort {
         intrinsicClassification(action) ??
           (await this.classifyResolved(action, target)),
       );
-      if (denied) this.breach(denied);
+      if (
+        denied &&
+        !(
+          policy.accessPolicy === "READ_WRITE" &&
+          this.authorizedActions.has(action)
+        )
+      )
+        this.breach(denied);
+      this.authorizedActions.delete(action);
     }
     const violation = this.policyViolation();
     if (violation) throw new SafeError(violation.code, violation.reason);

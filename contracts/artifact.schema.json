@@ -342,6 +342,34 @@
       "items": {
         "type": "object",
         "properties": {
+          "execution": {
+            "type": "object",
+            "properties": {
+              "decision": {
+                "type": "string",
+                "enum": [
+                  "auto_approve",
+                  "requires_human_review"
+                ]
+              },
+              "confidence": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "reason": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2000
+              }
+            },
+            "required": [
+              "decision",
+              "confidence",
+              "reason"
+            ],
+            "additionalProperties": false
+          },
           "step_id": {
             "type": "string",
             "pattern": "^[A-Za-z0-9_]+$"
@@ -403,6 +431,28 @@
                       }
                     ]
                   },
+                  "sort": {
+                    "type": "object",
+                    "properties": {
+                      "column_index": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      "direction": {
+                        "type": "string",
+                        "enum": [
+                          "ascending",
+                          "descending"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "column_index",
+                      "direction"
+                    ],
+                    "additionalProperties": false
+                  },
                   "scope": {
                     "anyOf": [
                       {
@@ -454,27 +504,6 @@
                   "required_matches": {
                     "type": "number",
                     "const": 1
-                  },
-                  "sort": {
-                    "type": "object",
-                    "properties": {
-                      "column_index": {
-                        "type": "integer",
-                        "minimum": 0
-                      },
-                      "direction": {
-                        "type": "string",
-                        "enum": [
-                          "ascending",
-                          "descending"
-                        ]
-                      }
-                    },
-                    "required": [
-                      "column_index",
-                      "direction"
-                    ],
-                    "additionalProperties": false
                   }
                 },
                 "required": [
@@ -827,6 +856,34 @@
                     "step": {
                       "type": "object",
                       "properties": {
+                        "execution": {
+                          "type": "object",
+                          "properties": {
+                            "decision": {
+                              "type": "string",
+                              "enum": [
+                                "auto_approve",
+                                "requires_human_review"
+                              ]
+                            },
+                            "confidence": {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            "reason": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 2000
+                            }
+                          },
+                          "required": [
+                            "decision",
+                            "confidence",
+                            "reason"
+                          ],
+                          "additionalProperties": false
+                        },
                         "step_id": {
                           "type": "string",
                           "pattern": "^[A-Za-z0-9_]+$"
@@ -888,6 +945,28 @@
                                     }
                                   ]
                                 },
+                                "sort": {
+                                  "type": "object",
+                                  "properties": {
+                                    "column_index": {
+                                      "type": "integer",
+                                      "minimum": 0,
+                                      "maximum": 9007199254740991
+                                    },
+                                    "direction": {
+                                      "type": "string",
+                                      "enum": [
+                                        "ascending",
+                                        "descending"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "column_index",
+                                    "direction"
+                                  ],
+                                  "additionalProperties": false
+                                },
                                 "scope": {
                                   "anyOf": [
                                     {
@@ -939,27 +1018,6 @@
                                 "required_matches": {
                                   "type": "number",
                                   "const": 1
-                                },
-                                "sort": {
-                                  "type": "object",
-                                  "properties": {
-                                    "column_index": {
-                                      "type": "integer",
-                                      "minimum": 0
-                                    },
-                                    "direction": {
-                                      "type": "string",
-                                      "enum": [
-                                        "ascending",
-                                        "descending"
-                                      ]
-                                    }
-                                  },
-                                  "required": [
-                                    "column_index",
-                                    "direction"
-                                  ],
-                                  "additionalProperties": false
                                 }
                               },
                               "required": [
@@ -1631,6 +1689,28 @@
                         }
                       ]
                     },
+                    "sort": {
+                      "type": "object",
+                      "properties": {
+                        "column_index": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "direction": {
+                          "type": "string",
+                          "enum": [
+                            "ascending",
+                            "descending"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "column_index",
+                        "direction"
+                      ],
+                      "additionalProperties": false
+                    },
                     "scope": {
                       "anyOf": [
                         {
@@ -1682,27 +1762,6 @@
                     "required_matches": {
                       "type": "number",
                       "const": 1
-                    },
-                    "sort": {
-                      "type": "object",
-                      "properties": {
-                        "column_index": {
-                          "type": "integer",
-                          "minimum": 0
-                        },
-                        "direction": {
-                          "type": "string",
-                          "enum": [
-                            "ascending",
-                            "descending"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "column_index",
-                        "direction"
-                      ],
-                      "additionalProperties": false
                     }
                   },
                   "required": [
@@ -2032,6 +2091,28 @@
                     }
                   ]
                 },
+                "sort": {
+                  "type": "object",
+                  "properties": {
+                    "column_index": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "direction": {
+                      "type": "string",
+                      "enum": [
+                        "ascending",
+                        "descending"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "column_index",
+                    "direction"
+                  ],
+                  "additionalProperties": false
+                },
                 "scope": {
                   "anyOf": [
                     {
@@ -2083,27 +2164,6 @@
                 "required_matches": {
                   "type": "number",
                   "const": 1
-                },
-                "sort": {
-                  "type": "object",
-                  "properties": {
-                    "column_index": {
-                      "type": "integer",
-                      "minimum": 0
-                    },
-                    "direction": {
-                      "type": "string",
-                      "enum": [
-                        "ascending",
-                        "descending"
-                      ]
-                    }
-                  },
-                  "required": [
-                    "column_index",
-                    "direction"
-                  ],
-                  "additionalProperties": false
                 }
               },
               "required": [

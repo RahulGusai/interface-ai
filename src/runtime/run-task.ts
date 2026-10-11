@@ -51,6 +51,8 @@ export type TaskRunContext = DispatchContext & {
   maxToolCalls: number;
   toolCallsUsed: number;
 };
+import { assessmentOf, entryAssessment } from "../contracts/execution.js";
+import type { ReviewHandler } from "./human-review.js";
 export type RunDependencies = {
   model: ModelClient;
   adapterFactory: BrowserAdapterFactory;
@@ -65,6 +67,7 @@ export async function runTask(
     onAudit?: AuditSink;
     signal?: AbortSignal;
     discovery?: DiscoveryContext;
+    review?: ReviewHandler;
   } = {},
 ): Promise<RunResult> {
   const input: TaskInput = parseTaskInput(raw);
@@ -321,6 +324,7 @@ export async function runTask(
     source: "bootstrap" | "model",
   ) => {
     let parsed: any;
+    let execution: unknown;
     let recordedTarget: any;
     let hint: any;
     let resolved: any;
@@ -329,6 +333,8 @@ export async function runTask(
     let preflight: ToolResponse | undefined;
     try {
       parsed = JSON.parse(call.argumentsJson);
+      execution = source === "bootstrap" ? entryAssessment : parsed?.execution;
+      if (parsed && typeof parsed === "object") delete parsed.execution;
     } catch {
       parsed = null;
     }
@@ -503,7 +509,7 @@ export async function runTask(
     }
     const dispatchedCall = {
       ...call,
-      argumentsJson: JSON.stringify(normalized),
+      argumentsJson: JSON.stringify({ ...normalized, execution }),
     };
     await audit({
       type: "tool_started",
@@ -537,6 +543,7 @@ export async function runTask(
         call_id: call.id,
         tool: call.name,
         input: parsed,
+        execution: assessmentOf(execution),
         target: recordedTarget,
         result: response.result,
       });
@@ -717,6 +724,8 @@ export async function runTask(
     const adapter = await deps.adapterFactory.createForTask(input);
     context = {
       adapter,
+      review: options.review,
+      signal: options.signal,
       accessPolicy: input.accessPolicy ?? "READ_ONLY",
       allowedHostname: new URL(input.targetUrl).hostname,
       contract,
@@ -933,11 +942,23 @@ export async function runTask(
               call.name === "request_human" &&
                 response.result.status === "requested"
                 ? toolSchemas.request_human.parse(
-                    JSON.parse(call.argumentsJson),
+                    (({ execution, ...input }) => input)(
+                      JSON.parse(call.argumentsJson),
+                    ),
                   ).message
                 : "blocker" in response.result && response.result.blocker
                   ? response.result.blocker.message
-                  : "Autonomous execution stopped",
+                  : response.result.status === "error"
+                    ? response.result.message
+                    : "Autonomous execution stopped",
+              response.result.status === "error"
+                ? {
+                    error: {
+                      code: response.result.code,
+                      message: response.result.message,
+                    },
+                  }
+                : {},
             ),
           );
         if (
@@ -945,7 +966,9 @@ export async function runTask(
           response.result.status === "accepted"
         ) {
           const proposed = finishTaskInput.parse(
-            JSON.parse(call.argumentsJson),
+            (({ execution, ...input }) => input)(
+              JSON.parse(call.argumentsJson),
+            ),
           );
           if (proposed.outcome === "goal_achieved" && options.discovery) {
             try {

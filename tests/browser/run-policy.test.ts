@@ -339,6 +339,11 @@ it.each(["READ_ONLY", "READ_WRITE"] as const)(
       steps: [
         {
           step_id: "save",
+          execution: {
+            decision: "requires_human_review",
+            confidence: 1,
+            reason: "Save record",
+          },
           tool: "click",
           arguments: {},
           target: {
@@ -388,6 +393,7 @@ it.each(["READ_ONLY", "READ_WRITE"] as const)(
         }),
       },
       {
+        review: async () => ({ status: "approved", review_id: "test-review" }),
         onAudit: async (type, payload) => {
           events.push({ type, payload });
         },

@@ -96,6 +96,7 @@ RunStart = Annotated[DiscoveryStart | ReplayStart, Field(discriminator="kind")]
 RunStatus = Literal[
     "queued",
     "running",
+    "awaiting_human",
     "awaiting_finalization",
     "validating",
     "cancelling",
@@ -283,3 +284,48 @@ class ArtifactSummaryDTO(DTO):
 class ArtifactDTO(ArtifactSummaryDTO):
     definition: dict[str, Any]
     assets: list[ArtifactAssetDTO]
+
+
+class ExecutionAssessment(DTO):
+    decision: Literal["auto_approve", "requires_human_review"]
+    confidence: float = Field(ge=0, le=1, allow_inf_nan=False, strict=True)
+    reason: str = Field(min_length=1, max_length=2000)
+
+
+ReviewStatus = Literal["pending", "approved", "rejected", "expired", "cancelled"]
+
+
+class HumanReviewCreate(DTO):
+    review_id: UUID
+    call_id: str = Field(min_length=1, max_length=200)
+    tool: str = Field(min_length=1, max_length=100)
+    arguments: dict[str, Any]
+    assessment: ExecutionAssessment | None = None
+    event_sequence: int = Field(gt=0)
+    state_fingerprint: str = Field(pattern=r"^[a-f0-9]{64}$")
+
+
+class HumanReviewDecision(DTO):
+    decision: Literal["approved", "rejected"]
+    comment: str | None = Field(None, max_length=2000)
+
+
+class HumanReviewDTO(DTO):
+    review_id: str
+    run_id: str
+    call_id: str
+    tool: str
+    arguments: dict[str, Any]
+    assessment_decision: Literal["auto_approve", "requires_human_review"] | None
+    confidence: float | None
+    reason: str
+    access_policy: Literal["READ_WRITE"]
+    screenshot_asset_id: str
+    event_sequence: int
+    state_fingerprint: str
+    status: ReviewStatus
+    run_status: RunStatus
+    created_at: str
+    expires_at: str
+    decided_at: str | None
+    human_comment: str | None

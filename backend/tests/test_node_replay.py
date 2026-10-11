@@ -102,7 +102,11 @@ async def test_node_replay_persists_real_png_and_rejects_unknown_effects(
 
         completion = await runner.run(command, sink, asyncio.Event())
         assert completion["runtime_result"]["status"] == "hard_failure", completion
-        assert completion["runtime_result"]["code"] == "ACCESS_POLICY_VIOLATION"
+        assert completion["runtime_result"]["code"] == (
+            "ACCESS_POLICY_VIOLATION"
+            if policy == "READ_ONLY"
+            else "HUMAN_REVIEW_UNAVAILABLE"
+        )
         assert completion["runtime_result"]["dispatch_state"] == "not_dispatched"
         assert completion["runtime_result"]["outputs"] is None
         assets = repo.rows("evidence_assets", order="event_sequence")
@@ -112,11 +116,13 @@ async def test_node_replay_persists_real_png_and_rejects_unknown_effects(
             e
             for e in events
             if e["type"] == "tool_finished"
-            and e["payload"]["result"]["status"] == "policy_blocked"
+            and e["payload"]["result"]["status"]
+            == ("policy_blocked" if policy == "READ_ONLY" else "error")
         ]
         assert len(rejected) == 1
-        assert rejected[0]["payload"]["result"]["policy"]["access_policy"] == policy
-        assert rejected[0]["payload"]["result"]["policy"]["category"] == "unknown"
+        if policy == "READ_ONLY":
+            assert rejected[0]["payload"]["result"]["policy"]["access_policy"] == policy
+            assert rejected[0]["payload"]["result"]["policy"]["category"] == "unknown"
         assert [e["sequence"] for e in events] == list(range(1, len(events) + 1))
         assert not list(staging.glob("*.png")) and not any(
             "model_proposed" == e["type"] for e in events

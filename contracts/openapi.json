@@ -1731,6 +1731,239 @@
         }
       }
     },
+    "/v1/runs/{ident}/human-reviews": {
+      "post": {
+        "summary": "Create Review",
+        "operationId": "create_review_v1_runs__ident__human_reviews_post",
+        "parameters": [
+          {
+            "name": "ident",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Ident"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HumanReviewCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HumanReviewDTO"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/human-reviews": {
+      "get": {
+        "summary": "List Reviews",
+        "operationId": "list_reviews_v1_human_reviews_get",
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "pending",
+                    "approved",
+                    "rejected",
+                    "expired",
+                    "cancelled"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "name": "run_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Run Id"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 20,
+              "title": "Page Size"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Page_HumanReviewDTO_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/human-reviews/{ident}": {
+      "get": {
+        "summary": "Get Review",
+        "operationId": "get_review_v1_human_reviews__ident__get",
+        "parameters": [
+          {
+            "name": "ident",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Ident"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HumanReviewDTO"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/human-reviews/{ident}/decision": {
+      "post": {
+        "summary": "Decide Review",
+        "operationId": "decide_review_v1_human_reviews__ident__decision_post",
+        "parameters": [
+          {
+            "name": "ident",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Ident"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HumanReviewDecision"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HumanReviewDTO"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/health/live": {
       "get": {
         "summary": "Live",
@@ -2241,7 +2474,10 @@
           },
           "state": {
             "type": "string",
-            "enum": ["ready", "retired"],
+            "enum": [
+              "ready",
+              "retired"
+            ],
             "title": "State"
           },
           "deployment_config_version": {
@@ -2461,14 +2697,19 @@
         },
         "additionalProperties": false,
         "type": "object",
-        "required": ["expected_config_version"],
+        "required": [
+          "expected_config_version"
+        ],
         "title": "DeploymentPatch"
       },
       "DiscoveryStart": {
         "properties": {
           "access_policy": {
             "type": "string",
-            "enum": ["READ_ONLY", "READ_WRITE"],
+            "enum": [
+              "READ_ONLY",
+              "READ_WRITE"
+            ],
             "title": "Access Policy",
             "default": "READ_ONLY"
           },
@@ -2495,7 +2736,11 @@
         },
         "additionalProperties": false,
         "type": "object",
-        "required": ["kind", "app_deployment_id", "task"],
+        "required": [
+          "kind",
+          "app_deployment_id",
+          "task"
+        ],
         "title": "DiscoveryStart"
       },
       "EventsDTO": {
@@ -2520,6 +2765,7 @@
             "enum": [
               "queued",
               "running",
+              "awaiting_human",
               "awaiting_finalization",
               "validating",
               "cancelling",
@@ -2533,7 +2779,12 @@
         },
         "additionalProperties": false,
         "type": "object",
-        "required": ["items", "next_after_sequence", "has_more", "run_status"],
+        "required": [
+          "items",
+          "next_after_sequence",
+          "has_more",
+          "run_status"
+        ],
         "title": "EventsDTO"
       },
       "EvidenceAssetDTO": {
@@ -2629,6 +2880,38 @@
         ],
         "title": "EvidenceAssetDTO"
       },
+      "ExecutionAssessment": {
+        "properties": {
+          "decision": {
+            "type": "string",
+            "enum": [
+              "auto_approve",
+              "requires_human_review"
+            ],
+            "title": "Decision"
+          },
+          "confidence": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Confidence"
+          },
+          "reason": {
+            "type": "string",
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Reason"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "decision",
+          "confidence",
+          "reason"
+        ],
+        "title": "ExecutionAssessment"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -2642,11 +2925,253 @@
         "type": "object",
         "title": "HTTPValidationError"
       },
+      "HumanReviewCreate": {
+        "properties": {
+          "review_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Review Id"
+          },
+          "call_id": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Call Id"
+          },
+          "tool": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Tool"
+          },
+          "arguments": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Arguments"
+          },
+          "assessment": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ExecutionAssessment"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "event_sequence": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Event Sequence"
+          },
+          "state_fingerprint": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "State Fingerprint"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "review_id",
+          "call_id",
+          "tool",
+          "arguments",
+          "event_sequence",
+          "state_fingerprint"
+        ],
+        "title": "HumanReviewCreate"
+      },
+      "HumanReviewDTO": {
+        "properties": {
+          "review_id": {
+            "type": "string",
+            "title": "Review Id"
+          },
+          "run_id": {
+            "type": "string",
+            "title": "Run Id"
+          },
+          "call_id": {
+            "type": "string",
+            "title": "Call Id"
+          },
+          "tool": {
+            "type": "string",
+            "title": "Tool"
+          },
+          "arguments": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Arguments"
+          },
+          "assessment_decision": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "auto_approve",
+                  "requires_human_review"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assessment Decision"
+          },
+          "confidence": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confidence"
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason"
+          },
+          "access_policy": {
+            "type": "string",
+            "const": "READ_WRITE",
+            "title": "Access Policy"
+          },
+          "screenshot_asset_id": {
+            "type": "string",
+            "title": "Screenshot Asset Id"
+          },
+          "event_sequence": {
+            "type": "integer",
+            "title": "Event Sequence"
+          },
+          "state_fingerprint": {
+            "type": "string",
+            "title": "State Fingerprint"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "approved",
+              "rejected",
+              "expired",
+              "cancelled"
+            ],
+            "title": "Status"
+          },
+          "run_status": {
+            "type": "string",
+            "enum": [
+              "queued",
+              "running",
+              "awaiting_human",
+              "awaiting_finalization",
+              "validating",
+              "cancelling",
+              "completed",
+              "failed",
+              "cancelled",
+              "interrupted"
+            ],
+            "title": "Run Status"
+          },
+          "created_at": {
+            "type": "string",
+            "title": "Created At"
+          },
+          "expires_at": {
+            "type": "string",
+            "title": "Expires At"
+          },
+          "decided_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decided At"
+          },
+          "human_comment": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Human Comment"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "review_id",
+          "run_id",
+          "call_id",
+          "tool",
+          "arguments",
+          "assessment_decision",
+          "confidence",
+          "reason",
+          "access_policy",
+          "screenshot_asset_id",
+          "event_sequence",
+          "state_fingerprint",
+          "status",
+          "run_status",
+          "created_at",
+          "expires_at",
+          "decided_at",
+          "human_comment"
+        ],
+        "title": "HumanReviewDTO"
+      },
+      "HumanReviewDecision": {
+        "properties": {
+          "decision": {
+            "type": "string",
+            "enum": [
+              "approved",
+              "rejected"
+            ],
+            "title": "Decision"
+          },
+          "comment": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Comment"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "decision"
+        ],
+        "title": "HumanReviewDecision"
+      },
       "InvokeRequest": {
         "properties": {
           "access_policy": {
             "type": "string",
-            "enum": ["READ_ONLY", "READ_WRITE"],
+            "enum": [
+              "READ_ONLY",
+              "READ_WRITE"
+            ],
             "title": "Access Policy",
             "default": "READ_ONLY"
           },
@@ -2663,14 +3188,21 @@
         },
         "additionalProperties": false,
         "type": "object",
-        "required": ["app_deployment_id", "inputs"],
+        "required": [
+          "app_deployment_id",
+          "inputs"
+        ],
         "title": "InvokeRequest"
       },
       "OutcomeDTO": {
         "properties": {
           "kind": {
             "type": "string",
-            "enum": ["success", "expected_outcome", "hard_failure"],
+            "enum": [
+              "success",
+              "expected_outcome",
+              "hard_failure"
+            ],
             "title": "Kind"
           },
           "code": {
@@ -2730,14 +3262,22 @@
           },
           "dispatch_state": {
             "type": "string",
-            "enum": ["not_dispatched", "completed", "uncertain"],
+            "enum": [
+              "not_dispatched",
+              "completed",
+              "uncertain"
+            ],
             "title": "Dispatch State",
             "default": "not_dispatched"
           }
         },
         "additionalProperties": false,
         "type": "object",
-        "required": ["kind", "code", "message"],
+        "required": [
+          "kind",
+          "code",
+          "message"
+        ],
         "title": "OutcomeDTO"
       },
       "Page_AppDeploymentDTO_": {
@@ -2764,7 +3304,12 @@
         },
         "additionalProperties": false,
         "type": "object",
-        "required": ["items", "total", "page", "page_size"],
+        "required": [
+          "items",
+          "total",
+          "page",
+          "page_size"
+        ],
         "title": "Page[AppDeploymentDTO]"
       },
       "Page_ArtifactAssetDTO_": {
@@ -2791,7 +3336,12 @@
         },
         "additionalProperties": false,
         "type": "object",
-        "required": ["items", "total", "page", "page_size"],
+        "required": [
+          "items",
+          "total",
+          "page",
+          "page_size"
+        ],
         "title": "Page[ArtifactAssetDTO]"
       },
       "Page_ArtifactSummaryDTO_": {
@@ -2818,7 +3368,12 @@
         },
         "additionalProperties": false,
         "type": "object",
-        "required": ["items", "total", "page", "page_size"],
+        "required": [
+          "items",
+          "total",
+          "page",
+          "page_size"
+        ],
         "title": "Page[ArtifactSummaryDTO]"
       },
       "Page_BindingDTO_": {
@@ -2845,7 +3400,12 @@
         },
         "additionalProperties": false,
         "type": "object",
-        "required": ["items", "total", "page", "page_size"],
+        "required": [
+          "items",
+          "total",
+          "page",
+          "page_size"
+        ],
         "title": "Page[BindingDTO]"
       },
       "Page_CapabilityDTO_": {
@@ -2872,7 +3432,12 @@
         },
         "additionalProperties": false,
         "type": "object",
-        "required": ["items", "total", "page", "page_size"],
+        "required": [
+          "items",
+          "total",
+          "page",
+          "page_size"
+        ],
         "title": "Page[CapabilityDTO]"
       },
       "Page_EvidenceAssetDTO_": {
@@ -2899,8 +3464,45 @@
         },
         "additionalProperties": false,
         "type": "object",
-        "required": ["items", "total", "page", "page_size"],
+        "required": [
+          "items",
+          "total",
+          "page",
+          "page_size"
+        ],
         "title": "Page[EvidenceAssetDTO]"
+      },
+      "Page_HumanReviewDTO_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/HumanReviewDTO"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "page": {
+            "type": "integer",
+            "title": "Page"
+          },
+          "page_size": {
+            "type": "integer",
+            "title": "Page Size"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "items",
+          "total",
+          "page",
+          "page_size"
+        ],
+        "title": "Page[HumanReviewDTO]"
       },
       "Page_RunDTO_": {
         "properties": {
@@ -2926,7 +3528,12 @@
         },
         "additionalProperties": false,
         "type": "object",
-        "required": ["items", "total", "page", "page_size"],
+        "required": [
+          "items",
+          "total",
+          "page",
+          "page_size"
+        ],
         "title": "Page[RunDTO]"
       },
       "ProgressDTO": {
@@ -2971,14 +3578,19 @@
         },
         "additionalProperties": false,
         "type": "object",
-        "required": ["last_event_sequence"],
+        "required": [
+          "last_event_sequence"
+        ],
         "title": "ProgressDTO"
       },
       "ReplayStart": {
         "properties": {
           "access_policy": {
             "type": "string",
-            "enum": ["READ_ONLY", "READ_WRITE"],
+            "enum": [
+              "READ_ONLY",
+              "READ_WRITE"
+            ],
             "title": "Access Policy",
             "default": "READ_ONLY"
           },
@@ -3005,14 +3617,22 @@
         },
         "additionalProperties": false,
         "type": "object",
-        "required": ["kind", "app_deployment_id", "artifact_id", "inputs"],
+        "required": [
+          "kind",
+          "app_deployment_id",
+          "artifact_id",
+          "inputs"
+        ],
         "title": "ReplayStart"
       },
       "RunDTO": {
         "properties": {
           "access_policy": {
             "type": "string",
-            "enum": ["READ_ONLY", "READ_WRITE"],
+            "enum": [
+              "READ_ONLY",
+              "READ_WRITE"
+            ],
             "title": "Access Policy"
           },
           "run_id": {
@@ -3021,12 +3641,18 @@
           },
           "kind": {
             "type": "string",
-            "enum": ["discovery", "replay"],
+            "enum": [
+              "discovery",
+              "replay"
+            ],
             "title": "Kind"
           },
           "purpose": {
             "type": "string",
-            "enum": ["user", "validation"],
+            "enum": [
+              "user",
+              "validation"
+            ],
             "title": "Purpose"
           },
           "app_deployment_id": {
@@ -3156,7 +3782,12 @@
           },
           "selection_source": {
             "type": "string",
-            "enum": ["discovery", "binding", "explicit_artifact", "validation"],
+            "enum": [
+              "discovery",
+              "binding",
+              "explicit_artifact",
+              "validation"
+            ],
             "title": "Selection Source"
           },
           "status": {
@@ -3164,6 +3795,7 @@
             "enum": [
               "queued",
               "running",
+              "awaiting_human",
               "awaiting_finalization",
               "validating",
               "cancelling",
@@ -3365,7 +3997,10 @@
         "properties": {
           "access_policy": {
             "type": "string",
-            "enum": ["READ_ONLY", "READ_WRITE"],
+            "enum": [
+              "READ_ONLY",
+              "READ_WRITE"
+            ],
             "title": "Access Policy",
             "default": "READ_ONLY"
           },
@@ -3382,7 +4017,10 @@
         },
         "additionalProperties": false,
         "type": "object",
-        "required": ["app_deployment_id", "inputs"],
+        "required": [
+          "app_deployment_id",
+          "inputs"
+        ],
         "title": "ValidateRequest"
       },
       "ValidationError": {
@@ -3418,7 +4056,11 @@
           }
         },
         "type": "object",
-        "required": ["loc", "msg", "type"],
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
         "title": "ValidationError"
       }
     }

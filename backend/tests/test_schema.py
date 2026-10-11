@@ -4,18 +4,19 @@ from pathlib import Path
 import pytest
 
 
-def test_database_is_transactional_and_only_eight_tables(tmp_path):
+def test_database_is_transactional_and_nine_tables(tmp_path):
     from interface_api.db import Database
 
     db = Database(tmp_path / "data" / "test.sqlite3")
     db.migrate()
     with db.connect() as c:
-        assert c.execute("PRAGMA user_version").fetchone()[0] == 3
+        assert c.execute("PRAGMA user_version").fetchone()[0] == 4
         assert c.execute("PRAGMA foreign_keys").fetchone()[0] == 1
         names = {
             r[0] for r in c.execute("SELECT name FROM sqlite_master WHERE type='table'")
         }
         assert names == {
+            "human_review",
             "runs",
             "artifacts",
             "artifact_assets",
@@ -75,12 +76,17 @@ def test_upgrade_preserves_published_runs_bindings_and_guards(tmp_path, monkeypa
         c.execute(
             "ALTER TABLE runs ADD COLUMN access_policy TEXT NOT NULL DEFAULT 'READ_ONLY'"
         )
+    with db.connect() as c:
+        c.execute(
+            "CREATE TABLE human_review (review_id TEXT,run_id TEXT,status TEXT,created_at TEXT)"
+        )
     repo = Repository(db)
     life, source, artifact, validation = bundle(repo, tmp_path)
     life.publish_validated(
         source["run_id"], artifact["artifact_id"], validation["run_id"]
     )
     with db.connect() as c:
+        c.execute("DROP TABLE human_review")
         c.execute("ALTER TABLE runs DROP COLUMN access_policy")
         tables = [
             row[0]
@@ -113,7 +119,7 @@ def test_upgrade_preserves_published_runs_bindings_and_guards(tmp_path, monkeypa
         assert {
             name: list(c.execute(f"SELECT * FROM {name}")) for name in tables
         } == before
-    assert db.migrate() == 3
+    assert db.migrate() == 4
     db.migrate()
     with db.connect() as c:
         assert {
@@ -133,7 +139,7 @@ def test_upgrade_preserves_published_runs_bindings_and_guards(tmp_path, monkeypa
             for row in c.execute(
                 "SELECT type,name FROM sqlite_master WHERE type IN ('index','trigger')"
             )
-        } == guards
+        } >= guards
         with pytest.raises(sqlite3.IntegrityError, match="selection is immutable"):
             c.execute("UPDATE runs SET binding_snapshot_json=NULL")
         with pytest.raises(sqlite3.IntegrityError, match="append only"):

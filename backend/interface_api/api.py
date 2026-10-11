@@ -16,8 +16,12 @@ from .dto import (
     DeploymentPatch,
     EventsDTO,
     EvidenceAssetDTO,
+    HumanReviewCreate,
+    HumanReviewDecision,
+    HumanReviewDTO,
     InvokeRequest,
     Page,
+    ReviewStatus,
     RunDTO,
     RunStart,
     SignedAssetDTO,
@@ -463,3 +467,50 @@ async def evidence_url(request: Request, response: Response, ident: str):
 async def crop_url(request: Request, response: Response, ident: str):
     response.headers["Cache-Control"] = "no-store"
     return await services(request).signed("artifact_assets", ident)
+
+
+@router.post(
+    "/runs/{ident}/human-reviews", status_code=201, response_model=HumanReviewDTO
+)
+async def create_review(request: Request, ident: UUID, body: HumanReviewCreate):
+    from .reviews import Reviews
+
+    return await threaded(
+        Reviews(
+            repo(request), request.app.state.settings.review_timeout_seconds
+        ).create,
+        str(ident),
+        body.model_dump(mode="json"),
+    )
+
+
+@router.get("/human-reviews", response_model=Page[HumanReviewDTO])
+async def list_reviews(
+    request: Request,
+    status: ReviewStatus | None = None,
+    run_id: UUID | None = None,
+    page_number: int = Query(1, alias="page", ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+):
+    from .reviews import Reviews
+
+    items = await threaded(
+        Reviews(repo(request)).list, status, str(run_id) if run_id else None
+    )
+    return page(items, page_size, page_number)
+
+
+@router.get("/human-reviews/{ident}", response_model=HumanReviewDTO)
+async def get_review(request: Request, ident: UUID):
+    from .reviews import Reviews
+
+    return await threaded(Reviews(repo(request)).get, str(ident))
+
+
+@router.post("/human-reviews/{ident}/decision", response_model=HumanReviewDTO)
+async def decide_review(request: Request, ident: UUID, body: HumanReviewDecision):
+    from .reviews import Reviews
+
+    return await threaded(
+        Reviews(repo(request)).decide, str(ident), body.decision, body.comment
+    )

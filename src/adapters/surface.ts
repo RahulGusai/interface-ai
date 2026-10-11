@@ -5,7 +5,11 @@ import type {
 import type { BrowserAction, ToolResponse } from "../contracts/tools.js";
 import type { Capture } from "../contracts/observation.js";
 import type { TaskInput } from "../contracts/run.js";
+import type { ToolAction } from "../contracts/tools.js";
+import type { ReviewSnapshot } from "../runtime/human-review.js";
 export interface BrowserAdapterPort {
+  reviewSnapshot?(action: ToolAction): Promise<ReviewSnapshot>;
+  authorizeReadWrite?(action: BrowserAction): void;
   readonly kind: "browser";
   readonly capabilities: ReadonlySet<string>;
   classifyAction?(action: BrowserAction): Promise<Classification>;

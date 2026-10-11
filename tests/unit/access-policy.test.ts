@@ -3,7 +3,7 @@ import { dispatchTool } from "../../src/runtime/dispatch.js";
 import { makeFakeAdapter } from "../helpers/fake-adapter.js";
 
 it.each(["READ_ONLY", "READ_WRITE"] as const)(
-  "unknown effects never dispatch under %s",
+  "unknown effects without assessment fail closed under %s",
   async (accessPolicy) => {
     const adapter = makeFakeAdapter();
     Object.assign(adapter, {
@@ -31,11 +31,15 @@ it.each(["READ_ONLY", "READ_WRITE"] as const)(
         target: { kind: "control", control_ref: "search" },
       }),
     });
-    expect(result.result).toMatchObject({
-      status: "policy_blocked",
-      code: "ACCESS_POLICY_VIOLATION",
-      policy: { access_policy: accessPolicy, category: "unknown" },
-    });
+    expect(result.result).toMatchObject(
+      accessPolicy === "READ_WRITE"
+        ? { status: "error", code: "HUMAN_REVIEW_UNAVAILABLE" }
+        : {
+            status: "policy_blocked",
+            code: "ACCESS_POLICY_VIOLATION",
+            policy: { access_policy: accessPolicy, category: "unknown" },
+          },
+    );
     expect(adapter.calls).toHaveLength(0);
     expect(context.halted).toBe(true);
   },
@@ -85,6 +89,11 @@ it.each(["READ_ONLY", "READ_WRITE"] as const)(
       argumentsJson: JSON.stringify({
         observation_id: o.observation_id,
         target: { kind: "control", control_ref: "save" },
+        execution: {
+          decision: "auto_approve",
+          confidence: 0.3,
+          reason: "Synthetic test",
+        },
       }),
     });
     expect(response.result.status).toBe(

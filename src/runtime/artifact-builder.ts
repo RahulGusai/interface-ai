@@ -98,6 +98,7 @@ export function buildArtifact(
     return {
       step_id: `step_${i + 1}`,
       tool: record.tool,
+      ...(record.execution ? { execution: record.execution } : {}),
       arguments: args,
       ...(record.target ? { target: structuredClone(record.target) } : {}),
       pre_checks: [],

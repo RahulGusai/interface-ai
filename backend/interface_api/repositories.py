@@ -43,6 +43,7 @@ class Repository:
 
     def get(self, table, key, value, conn=None):
         if table not in {
+            "human_review",
             "app_deployments",
             "capabilities",
             "runs",
@@ -60,6 +61,7 @@ class Repository:
             "binding_id",
             "asset_id",
             "idempotency_key",
+            "review_id",
         }:
             raise ValueError("Invalid key")
         if conn is not None:
@@ -77,6 +79,7 @@ class Repository:
 
     def rows(self, table, where="", params=(), order="created_at DESC", conn=None):
         allowed = {
+            "human_review",
             "app_deployments",
             "capabilities",
             "runs",
@@ -251,7 +254,9 @@ class Repository:
         current = self.get("runs", "run_id", run_id, conn)
         allowed = {
             "queued": {"running", "cancelled", "interrupted", "failed"},
+            "awaiting_human": {"running", "failed", "cancelling", "interrupted"},
             "running": {
+                "awaiting_human",
                 "awaiting_finalization",
                 "completed",
                 "failed",
@@ -290,6 +295,33 @@ class Repository:
                 run_id,
             ),
         )
-        event = "run_started" if status == "running" else "run_" + status
+        if status in ("failed", "cancelling", "cancelled", "interrupted", "completed"):
+            pending = self.rows(
+                "human_review", "run_id=? AND status='pending'", (run_id,), conn=conn
+            )
+            for review in pending:
+                review_status = (
+                    "expired"
+                    if (result or {}).get("outcome", {}).get("code")
+                    == "HUMAN_REVIEW_EXPIRED"
+                    else "cancelled"
+                )
+                conn.execute(
+                    "UPDATE human_review SET status=?,decided_at=? WHERE review_id=?",
+                    (review_status, stamp, review["review_id"]),
+                )
+                self.event(
+                    run_id,
+                    "human_review_" + review_status,
+                    {"review_id": review["review_id"], "run_status": status},
+                    conn=conn,
+                )
+        event = (
+            "run_resumed"
+            if status == "running" and current["status"] == "awaiting_human"
+            else "run_started"
+            if status == "running"
+            else "run_" + status
+        )
         self.event(run_id, event, result or {}, conn=conn)
         return self.get("runs", "run_id", run_id, conn)

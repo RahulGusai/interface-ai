@@ -13,8 +13,14 @@ import { finalize, type TaskContract } from "./finalization.js";
 import { validateToolResponse } from "./tool-response.js";
 import { toolValidationMessage } from "./validation-feedback.js";
 import { executeTool } from "../tools/registry.js";
+import { assessmentOf, requiresReview } from "../contracts/execution.js";
+import type { ReviewHandler } from "./human-review.js";
+import { SafeError } from "../contracts/errors.js";
+import { untilPolicyBreach } from "./action-policy.js";
 export type DispatchContext = {
   adapter: BrowserAdapterPort;
+  review?: ReviewHandler;
+  signal?: AbortSignal;
   accessPolicy?: AccessPolicy;
   allowedHostname?: string;
   contract?: TaskContract;
@@ -27,8 +33,14 @@ export async function dispatchTool(
   call: ToolCall,
 ): Promise<ToolResponse> {
   let action;
+  let execution: unknown;
   try {
-    action = parseToolAction(call.name, JSON.parse(call.argumentsJson));
+    const raw = JSON.parse(call.argumentsJson);
+    if (!raw || typeof raw !== "object" || Array.isArray(raw))
+      throw Error("Invalid input");
+    const { execution: proposed, ...input } = raw;
+    execution = proposed;
+    action = parseToolAction(call.name, input);
   } catch (error) {
     return {
       result: {
@@ -87,13 +99,70 @@ export async function dispatchTool(
         reason: "No trusted rule for the current action and target",
       };
     const violation = accessDecision(policy, classification);
-    if (violation) {
+    if (violation && policy === "READ_ONLY") {
       context.halted = true;
       return violationResponse(violation);
     }
+    let reviewed = false;
+    if (
+      policy === "READ_WRITE" &&
+      (requiresReview(execution) || action.name === "request_human")
+    ) {
+      if (!context.review || !context.adapter.reviewSnapshot)
+        throw new SafeError(
+          "HUMAN_REVIEW_UNAVAILABLE",
+          "Human review is not configured",
+        );
+      const signals = [context.signal, context.adapter.policySignal].filter(
+        (s): s is AbortSignal => !!s,
+      );
+      const signal = signals.length ? AbortSignal.any(signals) : undefined;
+      let snapshot = await context.adapter.reviewSnapshot(action);
+      for (;;) {
+        signal?.throwIfAborted();
+        const decision = await untilPolicyBreach(signal, () =>
+          context.review!(
+            {
+              ...snapshot,
+              call_id: call.id,
+              tool: action.name,
+              arguments: action.input as Record<string, unknown>,
+              assessment: assessmentOf(execution),
+            },
+            signal,
+          ),
+        );
+        signal?.throwIfAborted();
+        if (decision.status !== "approved")
+          throw new SafeError(
+            `HUMAN_REVIEW_${decision.status.toUpperCase()}`,
+            `Human review ${decision.status}`,
+          );
+        const fresh = await context.adapter.reviewSnapshot(action);
+        if (fresh.fingerprint === snapshot.fingerprint) break;
+        snapshot = fresh;
+      }
+      reviewed = true;
+    }
+    context.signal?.throwIfAborted();
+    const pending = context.adapter.policyViolation?.();
+    if (pending) {
+      context.halted = true;
+      return violationResponse(pending);
+    }
+    if (
+      policy === "READ_WRITE" &&
+      action.name !== "finish_task" &&
+      action.name !== "request_human"
+    )
+      context.adapter.authorizeReadWrite?.(action);
     const response: ToolResponse =
       action.name === "request_human"
-        ? { result: requestIntervention(context) }
+        ? {
+            result: reviewed
+              ? { status: "approved" as const }
+              : requestIntervention(context),
+          }
         : action.name === "finish_task"
           ? {
               result: finalize(action.input, context.contract ?? {}),
@@ -112,13 +181,18 @@ export async function dispatchTool(
     )
       requestIntervention(context);
     return validateToolResponse(action.name, response);
-  } catch {
+  } catch (error) {
     context.halted = true;
+    const violation = context.adapter.policyViolation?.();
+    if (violation) return violationResponse(violation);
     return {
       result: {
         status: "error",
-        code: "TOOL_EXECUTION_FAILED",
-        message: "Tool failed; execution stopped without retry",
+        code: error instanceof SafeError ? error.code : "TOOL_EXECUTION_FAILED",
+        message:
+          error instanceof SafeError
+            ? error.message
+            : "Tool failed; execution stopped without retry",
       },
     };
   } finally {

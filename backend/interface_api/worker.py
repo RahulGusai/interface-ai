@@ -188,6 +188,10 @@ class Worker:
                 "artifact": artifact,
                 "assets": assets,
                 "staging_directory": str(staging),
+                "review": {
+                    "api_url": self.settings.runtime_api_url,
+                    "timeout_ms": self.settings.review_timeout_seconds * 1000,
+                },
                 "runtime": {
                     "headless": self.settings.headless,
                     "max_tool_calls": self.settings.max_tool_calls,
@@ -288,12 +292,12 @@ class Worker:
                 )
                 children = self.repo.rows(
                     "runs",
-                    "parent_run_id=? AND status IN ('queued','running','cancelling')",
+                    "parent_run_id=? AND status IN ('queued','running','awaiting_human','cancelling')",
                     (ident,),
                     conn=c,
                 )
                 for child in children:
-                    if child["status"] in ("queued", "running"):
+                    if child["status"] in ("queued", "running", "awaiting_human"):
                         self.repo.transition(
                             child["run_id"],
                             "cancelled"
@@ -304,7 +308,8 @@ class Worker:
                         )
                 # Queued validation tombstones have no child execution to settle their bundle.
                 if children and not any(
-                    child["status"] in ("running", "cancelling") for child in children
+                    child["status"] in ("running", "awaiting_human", "cancelling")
+                    for child in children
                 ):
                     self.repo.transition(ident, "cancelled", reason, conn=c)
                     c.execute(

@@ -111,7 +111,7 @@ def create_app(settings: Settings | None = None, storage=None, runner=None):
             "discovery_available": discovery,
             "replay_available": available,
             "execution_location": config.environment,
-            "handoff": "deferred",
+            "handoff": "approval_review",
         }
         return JSONResponse(body, status_code=200 if available else 503)
 

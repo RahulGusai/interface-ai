@@ -107,8 +107,11 @@ class Lifecycle:
                     code = (
                         "RUNTIME_STOPPED_REQUIRES_HUMAN"
                         if runtime["status"] == "needs_intervention"
-                        else runtime.get("error", {}).get("code", "PROVIDER_ERROR")
-                        if runtime["status"] in ("provider_error", "policy_blocked")
+                        else runtime.get("error", {}).get(
+                            "code", runtime["status"].upper()
+                        )
+                        if runtime["status"]
+                        in ("provider_error", "policy_blocked", "tool_error")
                         else "ARTIFACT_BUILD_FAILED"
                         if runtime.get("error", {}).get("code")
                         == "ARTIFACT_BUILD_FAILED"
@@ -126,7 +129,9 @@ class Lifecycle:
                                 stage="finalization"
                                 if code == "ARTIFACT_BUILD_FAILED"
                                 else "execution",
-                                dispatch="uncertain",
+                                dispatch="not_dispatched"
+                                if code.startswith(("HUMAN_REVIEW_", "REVIEW_"))
+                                else "uncertain",
                             )
                         },
                         runtime,

@@ -4,6 +4,7 @@ import type { Capture } from "../contracts/observation.js";
 import type { DurableTarget } from "../contracts/artifact.js";
 import type { CapabilityMetadata } from "./capability-metadata.js";
 export type RecordedAction = {
+  execution?: import("../contracts/execution.js").ExecutionAssessment;
   call_id: string;
   tool: string;
   input: any;

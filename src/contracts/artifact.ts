@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { executionAssessmentSchema } from "./execution.js";
 import { tableSort } from "./observation.js";
 import { objectRecord } from "./object-record.js";
 export const primitive = z.union([
@@ -213,6 +214,7 @@ const argumentTree: z.ZodType<any> = z.lazy(() =>
   ]),
 );
 const stepFields = {
+  execution: executionAssessmentSchema.optional(),
   step_id: z.string().regex(/^[A-Za-z0-9_]+$/),
   tool: z.enum([
     "observe_ui",

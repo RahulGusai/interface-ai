@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { DiscoveryContext } from "../runtime/discovery-context.js";
 import { createInterface } from "node:readline";
 import { startSchema, MAX_LINE } from "./protocol.js";
+import { createReviewHandler } from "./review-client.js";
 import { Transport } from "./transport.js";
 import { stageImage } from "./staging.js";
 import { createBrowserFactory } from "../adapters/factory.js";
@@ -61,12 +62,33 @@ async function execute(c: ReturnType<typeof startSchema.parse>) {
           ),
         ]
       : [];
-    await transport!.send(
+    return await transport!.send(
       "event",
       { event: { type, step_id, payload }, assets },
       true,
     );
   };
+  const review = c.review
+    ? createReviewHandler({
+        baseUrl: c.review.api_url,
+        runId: c.run_id,
+        timeoutMs: c.review.timeout_ms,
+        persistSnapshot: async (request) => {
+          const ack = (await emit(
+            "human_review_snapshot",
+            {
+              call_id: request.call_id,
+              tool: request.tool,
+              arguments: request.arguments,
+              assessment: request.assessment ?? null,
+              state_fingerprint: request.fingerprint,
+            },
+            request.capture.image,
+          )) as { event_sequence: number };
+          return ack.event_sequence;
+        },
+      })
+    : undefined;
   let result: any;
   let artifact: any = null;
   if (c.mode === "discovery") {
@@ -119,6 +141,7 @@ async function execute(c: ReturnType<typeof startSchema.parse>) {
       { model, adapterFactory: factory },
       {
         discovery,
+        review,
         signal: controller.signal,
         maxToolCalls: c.runtime.max_tool_calls,
         onAudit: async (record, image) => {
@@ -131,6 +154,9 @@ async function execute(c: ReturnType<typeof startSchema.parse>) {
               (record.type === "tool_finished" &&
                 record.result.status === "policy_blocked" &&
                 record.result.policy?.dispatch_state === "not_dispatched") ||
+              (record.type === "tool_finished" &&
+                record.result.status === "error" &&
+                /^(HUMAN_REVIEW_|REVIEW_)/.test(record.result.code)) ||
               record.type === "tool_started"
                 ? "not_dispatched"
                 : record.type === "tool_finished" &&
@@ -151,7 +177,18 @@ async function execute(c: ReturnType<typeof startSchema.parse>) {
     result = await runReplay(
       c,
       { adapterFactory: factory },
-      { signal: controller.signal, onAudit: emit },
+      {
+        signal: controller.signal,
+        review,
+        onAudit: async (
+          type: string,
+          payload: Record<string, unknown>,
+          image?: ImageContent,
+          step_id?: string | null,
+        ) => {
+          await emit(type, payload, image, step_id);
+        },
+      },
     );
   }
   await transport!.send(

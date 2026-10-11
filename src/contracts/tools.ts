@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { executionAssessmentSchema } from "./execution.js";
 import {
   controlTarget,
   target,
@@ -158,7 +159,10 @@ export const toolDefinitions = Object.entries(toolSchemas).map(
       name,
       description: descriptions[name as ToolName],
       parameters: {
-        ...z.toJSONSchema(schema, { unrepresentable: "any", io: "input" }),
+        ...z.toJSONSchema(
+          schema.extend({ execution: executionAssessmentSchema }),
+          { unrepresentable: "any", io: "input" },
+        ),
         ...(name === "finish_task"
           ? {
               allOf: [
@@ -265,6 +269,7 @@ export const toolResultSchemas = {
     observation: observationSchema,
   }),
   request_human: z.union([
+    z.strictObject({ status: z.literal("approved") }),
     z.strictObject({ status: z.literal("requested"), request_id: z.string() }),
     z.strictObject({ status: z.literal("failed"), reason: z.string() }),
   ]),

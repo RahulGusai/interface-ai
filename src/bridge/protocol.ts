@@ -30,6 +30,9 @@ export const startSchema = z.strictObject({
     )
     .default([]),
   staging_directory: z.string(),
+  review: z
+    .strictObject({ api_url: z.url(), timeout_ms: z.number().int().positive() })
+    .optional(),
   runtime: z.strictObject({
     headless: z.boolean(),
     max_tool_calls: z.number().int().positive(),

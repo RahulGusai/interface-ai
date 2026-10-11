@@ -33,6 +33,13 @@ class Settings(BaseSettings):
     )
     headless: bool = Field(False, validation_alias="INTERFACE_BROWSER_HEADLESS")
     max_tool_calls: int = Field(40, gt=0, validation_alias="INTERFACE_MAX_TOOL_CALLS")
+    runtime_api_url: str = Field(
+        default_factory=lambda: "http://127.0.0.1:" + os.environ.get("PORT", "8000"),
+        validation_alias="INTERFACE_RUNTIME_API_URL",
+    )
+    review_timeout_seconds: int = Field(
+        300, ge=1, le=3600, validation_alias="INTERFACE_REVIEW_TIMEOUT_SECONDS"
+    )
     minio_endpoint: str | None = None
     minio_public_endpoint: str | None = None
     minio_secure: bool = True
@@ -72,6 +79,19 @@ class Settings(BaseSettings):
             ):
                 raise ValueError("Railway persistent volume must mount at DB directory")
             self.headless = True
+        callback = urlsplit(self.runtime_api_url)
+        if (
+            callback.scheme not in ("http", "https")
+            or not callback.netloc
+            or callback.username
+            or callback.password
+            or callback.query
+            or callback.fragment
+            or callback.path not in ("", "/")
+        ):
+            raise ValueError(
+                "Runtime API URL must be an HTTP origin without credentials"
+            )
         for origin in self.cors_origins:
             parsed = urlsplit(origin)
             if (

@@ -1,3 +1,5 @@
+import type { ReviewHandler } from "../runtime/human-review.js";
+import { entryAssessment } from "../contracts/execution.js";
 import { randomUUID, createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import {
@@ -41,7 +43,11 @@ export async function runReplay(
   > &
     Partial<Pick<StartCommand, "access_policy">>,
   deps: { adapterFactory: BrowserAdapterFactory },
-  options: { signal?: AbortSignal; onAudit: ReplayAudit },
+  options: {
+    signal?: AbortSignal;
+    onAudit: ReplayAudit;
+    review?: ReviewHandler;
+  },
 ): Promise<ReplayResult> {
   let adapter: BrowserAdapterPort | undefined;
   let stepId: string | null = null;
@@ -120,6 +126,8 @@ export async function runReplay(
     });
     const context: DispatchContext = {
       adapter,
+      review: options.review,
+      signal: options.signal,
       accessPolicy: command.access_policy ?? "READ_ONLY",
       allowedHostname: new URL(command.deployment.base_url).hostname,
       busy: false,
@@ -132,7 +140,8 @@ export async function runReplay(
         name: tool,
         argumentsJson: JSON.stringify(args),
       };
-      parseToolAction(tool, args);
+      const { execution: _assessment, ...mechanicalArgs } = args;
+      parseToolAction(tool, mechanicalArgs);
       await audit(
         "tool_started",
         {
@@ -158,6 +167,11 @@ export async function runReplay(
       if (response.result.status === "policy_blocked")
         dispatchState =
           response.result.policy?.dispatch_state ?? "not_dispatched";
+      if (
+        response.result.status === "error" &&
+        /^(HUMAN_REVIEW_|REVIEW_)/.test(response.result.code)
+      )
+        dispatchState = "not_dispatched";
       await audit(
         "tool_finished",
         {
@@ -169,8 +183,18 @@ export async function runReplay(
         response.image,
         id,
       );
-      if (response.result.status === "policy_blocked")
-        throw Error(response.result.code);
+      if (
+        response.result.status === "policy_blocked" ||
+        response.result.status === "error"
+      ) {
+        if (
+          response.result.code.startsWith("HUMAN_REVIEW_") ||
+          response.result.code.startsWith("REVIEW_") ||
+          response.result.status === "policy_blocked"
+        ) {
+          throw Error(response.result.code);
+        }
+      }
       return response;
     };
     const assertPolicy = () => {
@@ -200,6 +224,7 @@ export async function runReplay(
     const entry = await execute(
       "navigate",
       {
+        execution: entryAssessment,
         url: resolveBindings(
           definition.entry.url,
           inputs,
@@ -345,7 +370,11 @@ export async function runReplay(
       }
       if (s.tool !== "navigate" && s.tool !== "observe_ui")
         args.observation_id = capture.observation.observation_id;
-      const response = await execute(s.tool, args, s.step_id);
+      const response = await execute(
+        s.tool,
+        { ...args, execution: s.execution },
+        s.step_id,
+      );
       results[s.step_id] = response.result;
       if (
         !["completed", "ok", "evaluated", "condition_met"].includes(
