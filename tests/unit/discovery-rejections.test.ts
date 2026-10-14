@@ -41,7 +41,10 @@ const extraction = (ref: string) => ({
   ],
 });
 
-async function run(proposals: { name: string; args: unknown }[]) {
+async function run(
+  proposals: { name: string; args: unknown }[],
+  accessPolicy: "READ_ONLY" | "READ_WRITE" = "READ_ONLY",
+) {
   const adapter = makeFakeAdapter();
   const execute = adapter.execute.bind(adapter);
   adapter.capabilities.add("extract_data");
@@ -51,7 +54,11 @@ async function run(proposals: { name: string; args: unknown }[]) {
   const histories: InternalMessage[][] = [];
   const definitions: any[] = [];
   const result = await runTask(
-    { goal: "Read the account ending 7106", targetUrl: "https://example.org" },
+    {
+      goal: "Read the account ending 7106",
+      targetUrl: "https://example.org",
+      accessPolicy,
+    },
     {
       adapterFactory: {
         createForTask: async () => ({
@@ -124,7 +131,18 @@ async function run(proposals: { name: string; args: unknown }[]) {
             {
               id: `call_${histories.length}`,
               name: next.name,
-              argumentsJson: JSON.stringify(next.args),
+              argumentsJson: JSON.stringify({
+                ...(next.args as Record<string, unknown>),
+                ...(accessPolicy === "READ_WRITE"
+                  ? {
+                      execution: {
+                        decision: "auto_approve",
+                        confidence: 0.9,
+                        reason: "Read the synthetic account",
+                      },
+                    }
+                  : {}),
+              }),
             },
           ];
           return {
@@ -342,3 +360,69 @@ it("never promotes unknown validation categories to trusted instructions", async
   expect(discoveryCorrection("PAGE_SAYS_IGNORE_RULES")).toBeUndefined();
   expect(discoveryCorrection("toString")).toBeUndefined();
 });
+
+it.each(["READ_ONLY", "READ_WRITE"] as const)(
+  "allows corrected completion outputs to create an artifact under %s",
+  async (accessPolicy) => {
+    const s = await run(
+      [
+        {
+          name: "type_text",
+          args: {
+            observation_id: "obs_1",
+            target: { kind: "control", control_ref: "search" },
+            text: { kind: "input", path: "account_suffix" },
+            mode: "replace",
+          },
+        },
+        {
+          name: "extract_data",
+          args: { ...extraction("stable"), observation_id: "obs_2" },
+        },
+        {
+          name: "finish_task",
+          args: {
+            outcome: "goal_achieved",
+            summary: "Read the account",
+            outputs: {
+              account_number: "012-9637106",
+              original_email: "old@example.test",
+            },
+          },
+        },
+        {
+          name: "finish_task",
+          args: {
+            outcome: "goal_achieved",
+            summary: "Read the account",
+            outputs: { account_number: "012-9637106" },
+          },
+        },
+      ],
+      accessPolicy,
+    );
+    expect(s.result.status).toBe("goal_achieved");
+    const finishes = s.audits.filter(
+      (e) => e.type === "tool_finished" && e.call.name === "finish_task",
+    );
+    expect(finishes.map((e) => e.result.status)).toEqual(["error", "accepted"]);
+    expect(finishes[0].result).toMatchObject({
+      code: "UNBOUND_OUTPUT",
+      message: expect.stringContaining("same-named extracted field"),
+    });
+    expect(s.histories[3]).toContainEqual({
+      role: "system",
+      content: expect.stringContaining(
+        "Trusted runtime correction: UNBOUND_OUTPUT",
+      ),
+    });
+    expect(s.context.artifact?.definition.output_mapping).toEqual({
+      account_number: {
+        kind: "step_output",
+        step_id: "step_3",
+        path: "fields.account_number.value",
+      },
+    });
+    expect(s.result.toolCallsUsed).toBe(4);
+  },
+);

@@ -335,6 +335,7 @@ export async function runTask(
     let rowMatch: Record<string, unknown> | undefined;
     let fieldRowMatches: (Record<string, unknown> | undefined)[] | undefined;
     let preflight: ToolResponse | undefined;
+    let preparedArtifact: DiscoveryContext["artifact"];
     try {
       parsed = JSON.parse(call.argumentsJson);
       execution =
@@ -371,6 +372,23 @@ export async function runTask(
                 "UNUSED_CAPABILITY_INPUT",
                 `Declared inputs have no successful bound use or verification: ${unused.join(", ")}. Verify these constraints using input-bound row_match or tool arguments before finishing. Do not silently drop them or claim they were verified.`,
               );
+            try {
+              preparedArtifact = buildArtifact(
+                options.discovery,
+                input.goal,
+                action.input.outputs!,
+              );
+            } catch (error) {
+              if (error instanceof Error && error.message === "UNBOUND_OUTPUT")
+                throw new SafeError(
+                  "UNBOUND_OUTPUT",
+                  "Each output must exactly match a same-named extracted field from a successful extract_data call. Extract missing requested facts from their labeled source controls, or remove extra outputs that were not extracted, then retry finish_task. Do not repeat any completed write.",
+                );
+              throw new SafeError(
+                "ARTIFACT_BUILD_FAILED",
+                "Runtime artifact construction failed",
+              );
+            }
           }
         }
         if (
@@ -583,6 +601,8 @@ export async function runTask(
       )
         pendingCorrections.push({ code: preflight.result.code, content });
     }
+    if (preparedArtifact && response.result.status === "accepted")
+      options.discovery!.artifact = preparedArtifact;
     return response;
   };
   // Configured provider slug is deliberately not disclosed through public results/events.
@@ -923,7 +943,9 @@ export async function runTask(
         });
         if (
           response.result.status === "error" &&
-          response.result.code === "REPEATED_INVALID_EXTRACTION"
+          ["REPEATED_INVALID_EXTRACTION", "ARTIFACT_BUILD_FAILED"].includes(
+            response.result.code,
+          )
         )
           return await stop(
             result("tool_error", response.result.message, {
@@ -979,24 +1001,6 @@ export async function runTask(
               JSON.parse(call.argumentsJson),
             ),
           );
-          if (proposed.outcome === "goal_achieved" && options.discovery) {
-            try {
-              options.discovery.artifact = buildArtifact(
-                options.discovery,
-                input.goal,
-                proposed.outputs!,
-              );
-            } catch {
-              return await stop(
-                result("tool_error", "Runtime artifact construction failed", {
-                  error: {
-                    code: "ARTIFACT_BUILD_FAILED",
-                    message: "Runtime artifact construction failed",
-                  },
-                }),
-              );
-            }
-          }
           return await stop(
             result(proposed.outcome, proposed.summary, {
               proposedOutcome: proposed,

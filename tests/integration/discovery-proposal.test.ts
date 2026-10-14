@@ -20,6 +20,7 @@ it.each(["READ_ONLY", "READ_WRITE"] as const)(
       let step = 0,
         images = 0;
       const reviews: string[] = [];
+      const completions: string[] = [];
       const review = async (request: { tool: string }) => {
         reviews.push(request.tool);
         return {
@@ -82,6 +83,14 @@ it.each(["READ_ONLY", "READ_WRITE"] as const)(
                     output_type: "string",
                   },
                 ],
+              };
+              break;
+            case 4:
+              name = "finish_task";
+              input = {
+                outcome: "goal_achieved",
+                summary: "Status read",
+                outputs: { status: "Active", unextracted_note: "extra" },
               };
               break;
             default:
@@ -148,9 +157,20 @@ it.each(["READ_ONLY", "READ_WRITE"] as const)(
           adapterFactory: createBrowserFactory({ headless: true }),
           contract: syntheticContract(),
         },
-        { discovery, review },
+        {
+          discovery,
+          review,
+          onAudit: (record) => {
+            if (
+              record.type === "tool_finished" &&
+              record.call.name === "finish_task"
+            )
+              completions.push(record.result.status);
+          },
+        },
       );
       expect(result.status).toBe("goal_achieved");
+      expect(completions).toEqual(["error", "accepted"]);
       expect(discovery.artifact?.parameter_values).toEqual({
         email: "demo@example.test",
       });
