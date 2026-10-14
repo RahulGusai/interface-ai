@@ -16,3 +16,6 @@ __pycache__/
 /artifacts/
 /sandboxes/
 /.superpowers/
+
+# Reviewed synthetic screenshots included with the submission evidence.
+!/evidence/member-lookup/images/*.png

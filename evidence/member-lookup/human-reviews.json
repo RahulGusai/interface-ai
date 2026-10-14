@@ -1,0 +1,113 @@
+[
+  {
+    "review_id": "120734f6-b5fb-4fff-b0f8-219d1aa89991",
+    "run_id": "0e190104-fca8-4e29-b086-b9f1e6407749",
+    "call_id": "5a6d9591-5248-4cf3-a5d0-b25829f77add",
+    "tool": "click",
+    "arguments": {
+      "row_match": {
+        "customer_name": "Demo Missing Customer 999999"
+      }
+    },
+    "assessment_decision": null,
+    "confidence": null,
+    "reason": "Missing or invalid execution assessment",
+    "access_policy": "READ_ONLY",
+    "screenshot_asset_id": "df7985e6-4c5e-4eb4-b1a6-d5a376642d96",
+    "event_sequence": 18,
+    "state_fingerprint": "29b978fde40c658153a9a769556cb45783d905c1cf4eeacbb5523e39535ff3ce",
+    "status": "rejected",
+    "run_status": "failed",
+    "created_at": "2026-10-14T19:00:45.057741Z",
+    "expires_at": "2026-10-14T19:10:45.057784Z",
+    "decided_at": "2026-10-14T19:01:51.063645Z",
+    "human_comment": "Controlled exception demo: no matching customer was found. None of the offered controls opens the requested record. Rejecting this action to stop safely.",
+    "target_resolution": {
+      "reason": "not_found",
+      "candidates": [
+        {
+          "id": "62e01048-5fa1-40ec-a3d1-f009ffb0e31d",
+          "label": "link — Edit with Lovable — Edit with Lovable — Edit with",
+          "bounds": {
+            "x": 1124.421875,
+            "y": 764.0,
+            "width": 118.578125,
+            "height": 24.0
+          }
+        },
+        {
+          "id": "9f7df813-d505-46da-a4fa-3eb589a22030",
+          "label": "button — Dismiss — Edit with Lovable",
+          "bounds": {
+            "x": 1244.0,
+            "y": 764.0,
+            "width": 24.0,
+            "height": 24.0
+          }
+        },
+        {
+          "id": "43dbdf4f-b84a-4f5e-aaca-95a72ec43771",
+          "label": "button — Search — Quick account lookup",
+          "bounds": {
+            "x": 765.359375,
+            "y": 5.5,
+            "width": 48.859375,
+            "height": 19.0
+          }
+        },
+        {
+          "id": "63296597-b081-4456-8c1b-e024bad9ee9a",
+          "label": "link — Customer Search — Main",
+          "bounds": {
+            "x": 0.0,
+            "y": 33.0,
+            "width": 118.375,
+            "height": 24.1875
+          }
+        },
+        {
+          "id": "d80bcfb0-c979-41f9-818e-5f05d49caa88",
+          "label": "link — Supervisor Review (simulator) — Main",
+          "bounds": {
+            "x": 118.375,
+            "y": 33.0,
+            "width": 185.046875,
+            "height": 24.1875
+          }
+        },
+        {
+          "id": "0eaa7d04-24d0-47d9-9957-6f57bb0375fb",
+          "label": "button — Show branches — Customer search — ▾",
+          "bounds": {
+            "x": 1243.5625,
+            "y": 134.21875,
+            "width": 17.4375,
+            "height": 22.0
+          }
+        },
+        {
+          "id": "108aba69-9cfe-4a8b-85f4-f571d19521da",
+          "label": "button — Clear — Customer search",
+          "bounds": {
+            "x": 1146.28125,
+            "y": 159.21875,
+            "width": 50.6875,
+            "height": 22.0
+          }
+        },
+        {
+          "id": "57d4d7ec-bec0-46a4-a2c2-c45b2026cb8b",
+          "label": "button — Search — Customer search",
+          "bounds": {
+            "x": 1200.96875,
+            "y": 159.21875,
+            "width": 60.03125,
+            "height": 22.0
+          }
+        }
+      ]
+    },
+    "selected_candidate_id": null,
+    "refresh_targets": false
+  }
+]

@@ -1,0 +1,20 @@
+[
+  {
+    "binding_id": "5610278d-e531-45a7-ba63-cffa226f1c5b",
+    "app_deployment_id": "60799cd6-75f7-492e-8257-27280a3154f9",
+    "capability_id": "a0703f44-eb48-4757-961f-09d7bbacb8a8",
+    "artifact_id": "3054a0ec-043f-409c-8831-ba2eb007e5fa",
+    "binding_version": 1,
+    "state": "ready",
+    "deployment_config_version": 1,
+    "validation_run_id": "f90d2d48-f723-42b4-ad6b-12605303c930",
+    "selection_note": "Initial validated publication",
+    "created_at": "2026-10-14T18:58:43.791403Z",
+    "retired_at": null,
+    "readiness": {
+      "state": "ready",
+      "reason": "Validated at current configuration; fresh entry checks still required",
+      "validation_run_id": "f90d2d48-f723-42b4-ad6b-12605303c930"
+    }
+  }
+]

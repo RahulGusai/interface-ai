@@ -1,0 +1,12 @@
+{
+  "tenant_id": "33794363-82e8-4e1c-b2ce-799c7314a26a",
+  "product_id": "meridian-testbed",
+  "base_url": "https://legacy-account-servicing.lovable.app",
+  "environment": "production",
+  "ui_variant": "classic",
+  "vendor_release": "1.0",
+  "app_deployment_id": "60799cd6-75f7-492e-8257-27280a3154f9",
+  "config_version": 1,
+  "created_at": "2026-10-07T13:01:01.951620Z",
+  "updated_at": "2026-10-07T13:01:01.951620Z"
+}

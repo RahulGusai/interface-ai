@@ -1,0 +1,44 @@
+{
+  "capability_id": "a0703f44-eb48-4757-961f-09d7bbacb8a8",
+  "name": "find_customer_by_name_and_get_details",
+  "description": "Find a customer by their full name, ensuring the correct customer is selected if multiple matches exist. Return the customer's unique identifier and contact details without modifying any records.",
+  "input_schema": {
+    "additionalProperties": false,
+    "properties": {
+      "customer_name": {
+        "description": "The full name of the customer to search for.",
+        "type": "string"
+      }
+    },
+    "required": [
+      "customer_name"
+    ],
+    "type": "object"
+  },
+  "output_schema": {
+    "additionalProperties": false,
+    "properties": {
+      "address": {},
+      "city_postcode": {},
+      "customer_id": {},
+      "customer_name": {},
+      "email": {},
+      "phone": {}
+    },
+    "required": [
+      "customer_id",
+      "customer_name",
+      "address",
+      "city_postcode",
+      "email",
+      "phone"
+    ],
+    "type": "object"
+  },
+  "created_at": "2026-10-14T18:58:43.786599Z",
+  "counts": {
+    "published_artifacts": 1,
+    "ready_bindings": 1,
+    "runs": 3
+  }
+}

@@ -1,49 +1,97 @@
 # Architecture
 
-FastAPI is the control plane. It owns opaque IDs, lifecycle, input contracts, exact selection snapshots, a SQLite database and private MinIO storage. The database contains nine tables: runs, artifacts, artifact assets, run events, evidence assets, capabilities, app deployments, capability bindings and human_review. Node retains the existing typed tool dispatcher, Playwright browser and OpenRouter model loop. One in-memory worker supervises one child/browser at a time, with 16 pending jobs. Protocol events are acknowledged only after image upload and the event/asset metadata transaction have completed. Upload failure stops the child before another action; confirmed object bytes followed by a database failure can leave an orphan for conservative operator cleanup.
+I built a runtime that discovers a task through a real browser and replays the recorded flow with new inputs, without model decisions. Meridian, a synthetic banking application, provides search, account and contact-editing workflows.
 
-Discovery passes the original natural language task and stable capability catalog to the model. The model explicitly proposes reuse or a new operation; Python does not infer semantic identity from names or schema similarity. Source discovery is provisional until an observed durable plan is frozen, replayed successfully in a linked validation run, and atomically published. The first ready binding is part of that publication transaction. Subsequent versions require deliberate activation to change an existing binding.
+```mermaid
+flowchart LR
+    UI[Agent console] --> API[FastAPI and one worker]
+    API --> RT[Node runtime]
+    RT <-->|Discovery only| LLM[OpenRouter model]
+    RT --> AD[Playwright adapter]
+    AD --> APP[Live application]
+    RT -->|Events and images| API
+    API --> DB[(SQLite records)]
+    API --> OBJ[(Private MinIO images)]
+```
 
-Local execution can use a visible browser. The Railway recipe uses headless Chromium, one API process/replica and a persistent `/app/data` volume. This review feature does not deploy the service or provision storage. The queue is not recoverable: restart interrupts unfinished runs instead of repeating potentially dispatched actions.
+FastAPI owns admission, persistence and publication. Node owns browser execution, typed tools, discovery and replay. This separates lifecycle rules from agent decisions. SQLite and one in-memory worker keep deployment small: one active browser and 16 queued jobs. Review occupies the worker; restart interrupts unfinished runs without repeating potentially dispatched actions.
+
+Before discovery, the model proposes a capability name, description and example inputs; the runtime derives their types. The loop observes DOM-derived controls and screenshots, proposes tools, and executes them sequentially through validation and policy checks. OpenRouter keeps the vision/tool-calling model configurable. Each task binds one adapter and defaults to 40 tool calls, including rejected proposals. Provider history trims old observations but preserves extracted results; the audit retains full records.
+
+The target recorder supplies durable descriptions to in-memory execution records. The artifact builder converts those records into steps at successful `finish_task`; FastAPI persists the draft before completing discovery. Event acknowledgements follow persistence, so evidence failure stops further execution.
 
 # Artifact schema
 
-Artifact v1 stores surface/compatibility metadata, closed flat input/output JSON schemas, a trusted entry URL binding, ordered named steps, durable targets, finite checks, bounded recovery and output mappings. The shared structural schema is generated from TypeScript/Zod and used by Python. Bindings are explicit literal, input, prior-step output, trusted environment URL or primitive string template values. Number and boolean values stay typed; declared defaults are applied during input validation.
+A capability is the ability to perform an operation, such as looking up a customer. An artifact is one versioned way to perform it. An app deployment identifies a tenant's installation, including its URL and UI variant. A binding selects the validated artifact for a deployment and capability.
 
-Artifacts contain no historical observation/control/call IDs or recorded global point coordinates. Semantic targets use exact role/name, optionally bounded by named ancestor/frame descriptions. Point-capable tools use a pre-action PNG crop, immutable hash and normalized point within that crop. Python allocates final reference IDs and preserves event provenance separately. Publication freezes the executable definition; validation records the exact hash. Published capability schemas and artifact definitions are immutable. Every admitted replay pins an artifact ID/version/hash and deployment configuration, optionally with a binding snapshot.
+```mermaid
+flowchart LR
+    D[Discovery records] --> A[Frozen draft]
+    A --> V[Validation replay]
+    V -->|Pass| P[Published version]
+    V -->|Fail| F[Validation failed]
+    F -->|Explicit revalidation| V
+    P --> B[Initial ready binding]
+    B --> R[Capability invocation]
+```
+
+Publication atomically creates or reuses the capability, assigns an artifact version and creates the first ready binding. Later versions leave that binding unchanged until explicit activation. The current discovery builder always proposes a new capability; backend support for reuse exists, but automatic selection of an existing capability remains future work.
+
+The definition contains compatibility metadata, input/output contracts, entry point, steps, targets, checks, recoveries and output mappings. Bindings reference inputs, prior outputs, deployment configuration or templates. The Customer name textbox remains a stable target while its text references `inputs.customer_name`. Temporary control references and observation IDs stay out of the artifact.
+
+Replay pins the artifact ID, version, definition hash and deployment configuration. Semantic targets describe controls and their scope; visual targets reference a stored crop and a relative click point. Audit screenshots belong to run events; reusable crops belong to artifacts. The [schema appendix](docs/report-schema-reference.md) shows all nine entities, their relationships and the nested runtime contracts.
+
+There are limits to generated contracts today: input fields have primitive types, but generated output fields accept arbitrary JSON. The builder emits a final-tool-status checkpoint and leaves business outcomes, per-step checks and recovery declarations empty. The schema and replay engine support richer contracts; generating them from discovery is unfinished.
 
 # Determinism & error handling
 
-Replay has no model dependency. It navigates through the existing dispatcher, captures fresh state, resolves each target uniquely, persists resolution evidence before dispatch, builds new transient refs/call IDs, and checks the resulting state. Tool uncertainty, duplicate/missing targets, failed entry conditions and malformed outputs cannot become success. The synthetic member fixture exercises search, opening a parameterized result, and status extraction for two inputs. A declared missing member is an expected business outcome, not a crash.
+Replay resolves bindings, captures fresh UI state, resolves targets, executes the saved tool and evaluates its checks and outputs. It uses no model calls. Determinism applies to the execution rules; output values can change with application data.
 
-`rgb-template-v1` compares RGB at all integer translations with a pinned threshold of at least 0.95, exact accumulated-error rejection and IoU suppression of one physical anchor cluster. Flat crops are rejected. Exactly one surviving candidate is required, at the same viewport/scale and orientation. Shift and duplicate-anchor tests pass the two-second fixture gate. There is no OCR, rescaling, semantic fallback or cross-branding promise.
+Semantic targeting uses role, name, ancestor/frame scope and explicit row matching. Visual targeting uses `rgb-template-v1`, a recorded crop and a threshold of at least 0.95 at the recorded viewport and scale. It supports translation, but does not promise tolerance to zoom, theme or branding changes. Missing or ambiguous artifact targets pause for human selection or refresh; the choice affects only that execution.
 
-Read recovery is bounded to two waits or one explicitly saved interstitial action. A dispatched mutation is not blindly retried. Cancellation checks run around provider calls and before tools; provider abort and process-group cleanup bound shutdown. Events use monotonic database sequences, including filtered cursor advancement. HTTP starts require idempotency keys; configuration and binding changes use compare-and-swap versions. Storage/network failures have sanitized errors and honest missing/partial evidence. An interrupted or cancelled run remains a lifecycle stop with an explicit dispatch uncertainty.
+| Condition                                                          | Response                                                                    |
+| ------------------------------------------------------------------ | --------------------------------------------------------------------------- |
+| Declared business outcome, such as a missing member                | Return its code and mapped outputs when its checks match.                   |
+| Declared recoverable condition                                     | Run at most two saved waits or one saved recovery action, then check again. |
+| Policy breach, uncertain dispatch, failed checks or invalid output | Stop with structured failure details and evidence.                          |
+
+The first two paths require artifact declarations. Generated plans retain tool-level checks, but business verification needs observed results, ideally after reopening the record. Potentially dispatched writes are never blindly retried. HTTP idempotency prevents duplicate admission, not duplicate effects inside the target application.
 
 # Heterogeneity & multi-tenant
 
-Minimal deployment registration stores tenant/product IDs, trusted base URL, environment, UI variant, exact optional vendor release and a configuration version. It does not provision tenant registries or candidate deployments. A capability is a stable typed operation; immutable artifact versions can implement that operation differently. Bindings track deployment-specific validated selection history. A changed deployment configuration invalidates readiness without rewriting historical runs. Every execution still performs fresh entry checks even after prior validation.
+The adapter separates UI perception and actions from orchestration and recorded steps. Playwright supports the current browser implementation, including frame-aware controls and screenshot targeting. Native support would require an OS accessibility/screenshot adapter, native target resolution and policy, plus generalizing the browser-only surface and URL-entry contracts.
 
-This phase supports validation, replay and activation on the artifact's source deployment only. Cross-deployment portability, provisioning and broader compatibility matrices are deferred. A null vendor release is unspecified provenance; it does not prove support for all vendor releases.
+One capability can have several artifact implementations. Deployment bindings provide the place to select one for a vendor release or tenant variant. Today validation and activation are limited to the source deployment. My next extension would validate a candidate on another deployment, specialize it as a new immutable artifact when needed, and activate it only after verification. Configuration versions and fresh entry checks help detect incompatible changes.
+
+The existing capability invocation endpoint already selects a ready binding and starts replay. A calling agent could use a thin tool wrapper over this endpoint; MCP could expose the same catalog later. The wrapper would supply trusted deployment context and return outputs, business outcomes, failures or a pending review.
 
 # Escalation & handoff
 
-Approval-based intervention is implemented for READ_WRITE. Before proposing each tool call, the model provides `execution.decision`, `confidence` and `reason`, following the system prompt. Explicit review, auto-approval below 0.3, and absent/invalid assessments pause before dispatch. The runtime first persists the screenshot and exact action evidence, creates a `human_review` row through FastAPI, then polls its `status` once per second. The model recommendation is stored separately as `assessment_decision`.
+I chose approval and target selection to demonstrate manual control over execution within the take-home scope. The operator can stop an action, authorize it, or choose which observed control it should use. This exercises the same-session pause and continuation mechanism without first building browser streaming and remote input transport. Direct mouse and keyboard takeover remains a limitation of this version.
 
-`awaiting_human` is a run state, not another execution queue. Node, its browser session, current action and agent-loop history remain alive while waiting. The human approves or rejects via an API; approval returns the run to `running`, then Node rechecks the screen fingerprint and target before executing once and continuing the unfinished task. A changed review context requires a new review; stale targets fail closed. Rejection, expiry, cancellation and hard policy violations terminate the run. Pending reviews are cancelled on process restart; sessions are not crash-resumable. The sequential worker does not start another run during the wait. Each review has a configurable deadline (default five minutes).
+```mermaid
+flowchart LR
+    R[Running] -->|Review needed| W[Awaiting human]
+    W -->|Approve or select| C[Recheck live UI]
+    C -->|Unchanged| E[Execute once and continue]
+    C -->|Changed| W
+    W -->|Reject or expire| S[Stop]
+```
 
-Replay stores and reuses discovery's per-step assessment, applies current run policy and resolves fresh targets and arguments. It makes no new LLM calls. Each replay or validation run creates its own review when required; prior human approvals never become reusable permission. Legacy steps without assessments require review in READ_WRITE. This is a deliberate take-home tradeoff: stored assessment/confidence can become semantically stale when inputs, task context or application behavior change, even if a target still resolves. Fresh target checks and screenshots do not reclassify that behavior. Production would need re-assessment or stronger deterministic application-specific rules.
+Before waiting, the runtime persists the proposed action, arguments, screenshot and state fingerprint. FastAPI stores the review; Node polls while keeping the browser, pending action and history alive. Approval permits a fresh state and target check before execution. Target-selection reviews are available under both policies. Decisions and subsequent actions remain in the audit; choices never modify the frozen artifact. Cancellation, expiry and process restart stop continuation.
 
-READ_ONLY now runs without action/domain policy enforcement, trusted application rules, model execution assessments or approval routing. The task label does not prevent writes if the agent proposes them. Provider schemas and prompts omit assessments, supplied assessments are ignored, and replay bypasses stored assessment decisions. READ_WRITE retains its assessment/review flow, hostname restriction and native-dialog gate; its hard policy and browser blockers cannot be approved away. Model confidence is self-reported, not calibrated proof of safety; a high-confidence mistaken auto-approval remains a limitation. Operator authentication and authorization are still outside this prototype's scope. Both Lovable apps, browser streaming, human mouse/keyboard transport and full manual takeover are deferred. See [the backend contract](docs/human-review.md).
+The next step is embedding the same live browser in the console, with streaming, controlled input, an explicit agent/human owner, manual-action recording and revalidation on resume. Today the operator controls decisions while the runtime retains browser input; the extension would transfer direct input control too.
 
 # Safety
 
-Both policies retain stale observation rejection, target/layout validation, output validation and existing screenshot handling. READ_WRITE additionally retains document hostname enforcement and policy dialog handling; READ_ONLY bypasses those gates and uses normal browser mechanics. Model history retains actual permitted inline image bytes and observation correlation; MinIO URLs do not replace them. Credentials are server-side and excluded from argv, pipe commands and exported records. Staging is private, relative paths cannot escape or traverse symlinks, image bytes and metadata are verified, and the service does not create public bucket policies.
+For `READ_WRITE`, exact-host checks cover document navigation, redirects and frames; hard restrictions cannot be approved away. Explicit review requests, missing/invalid assessments and `auto_approve` confidence below 0.3 pause execution. At or above 0.3, auto-approval proceeds after hard checks. Confidence comes from the model and is not a calibrated safety guarantee. Replay reuses stored assessments without an LLM; required reviews are new for each run, but changed inputs can make an old assessment inappropriate.
 
-No authentication workstream is added. The public phase API and exact-origin CORS are the agreed scope; CORS is not authentication. Export is explicit and requires a synthetic-data declaration plus operator inspection before sharing.
+`READ_ONLY` currently bypasses action/domain enforcement and assessment-based approval. Its name therefore does not guarantee that writes are blocked. Both modes retain reference freshness, target validation and execution limits. An enforced read-only allowlist is needed before handling real customer workflows.
+
+The demo uses synthetic data. Provider and storage credentials remain server-side; captures omit password input values and images use private storage. General redaction of arguments, extracted values, page text and screenshots is not implemented. Private storage is not a substitute for redaction. The prototype also lacks API/operator authentication and tenant authorization; CORS only restricts browser origins.
 
 # Cuts
 
-The Lovable frontend integration, candidate provisioning, cross-deployment activation/validation, authentication, durable broker/queue, multiple workers/replicas, automatic retry, remote browser transport, full manual handoff are excluded. Legacy examples and historical GLM runs are not seeded as published capabilities. This change does not deploy the backend or update either Lovable application.
+I kept one worker and deferred crash recovery, distributed execution, native adapters and cross-tenant provisioning. This makes session ownership and failure behavior easier to inspect. The priority is to strengthen generated output types, business checkpoints and exception paths, restore enforceable read-only policy and redact sensitive content, then add the embedded live-session handoff.
 
-This feature was verified with 229 passing Node tests (one opt-in live-provider skip) and 60 passing backend tests, including real local HTTP, subprocess and Chromium review flows. Typecheck, lint, formatting and generated contracts passed. Live provider, hosted MinIO, Docker volume and deployed behavior were not exercised for this change; local end-to-end tests substitute the storage SDK. Full assignment readiness remains separate from this backend implementation, with both Lovable surfaces and full manual takeover deferred.
+Setup, replay and export commands are in the [README](README.md); focused human-review and target-selection verification is recorded in the [implementation notes](docs/human-review.md#verification). The [submission evidence](evidence/README.md) contains a genuine hosted discovery, its published artifact, validation, a changed-input replay and a missing-target replay rejected by the operator, with complete logs, screenshots and the recording. Local fixtures and mocked storage checks remain separate from that hosted evidence.

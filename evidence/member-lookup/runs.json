@@ -1,0 +1,332 @@
+[
+  {
+    "access_policy": "READ_ONLY",
+    "run_id": "5541ec6e-dc77-49ea-85ef-9f623fe29573",
+    "kind": "discovery",
+    "purpose": "user",
+    "app_deployment_id": "60799cd6-75f7-492e-8257-27280a3154f9",
+    "deployment_snapshot": {
+      "app_deployment_id": "60799cd6-75f7-492e-8257-27280a3154f9",
+      "base_url": "https://legacy-account-servicing.lovable.app",
+      "config_version": 1,
+      "environment": "production",
+      "product_id": "meridian-testbed",
+      "tenant_id": "33794363-82e8-4e1c-b2ce-799c7314a26a",
+      "ui_variant": "classic",
+      "vendor_release": "1.0"
+    },
+    "capability_id": "a0703f44-eb48-4757-961f-09d7bbacb8a8",
+    "task": "Find Halima Achterberg, making sure you select the correct customer if multiple people share that name. Open their profile and report their customer ID and contact details without changing any records.",
+    "inputs": {
+      "customer_name": "Halima Achterberg"
+    },
+    "pinned_artifact_id": null,
+    "artifact_version": null,
+    "artifact_definition_sha256": null,
+    "finalized_artifact_id": "3054a0ec-043f-409c-8831-ba2eb007e5fa",
+    "parent_run_id": null,
+    "binding_id": null,
+    "binding_version": null,
+    "binding_snapshot": null,
+    "selection_source": "discovery",
+    "status": "completed",
+    "outcome": {
+      "kind": "success",
+      "code": "GOAL_ACHIEVED",
+      "message": "Discovery artifact published after deterministic validation",
+      "outputs": {
+        "address": "282 Cobalt Avenue",
+        "city_postcode": "Fenwick Bay ZX30 1DR",
+        "customer_id": "C483704",
+        "customer_name": "Halima Achterberg",
+        "email": "halima.achterberg12@example.test",
+        "phone": "555-0117"
+      },
+      "failure_stage": null,
+      "step_id": null,
+      "expected": null,
+      "observed": null,
+      "dispatch_state": "completed"
+    },
+    "stop_reason": null,
+    "runtime_result": {
+      "model": "configured-model",
+      "outputs": {
+        "address": "282 Cobalt Avenue",
+        "city_postcode": "Fenwick Bay ZX30 1DR",
+        "customer_id": "C483704",
+        "customer_name": "Halima Achterberg",
+        "email": "halima.achterberg12@example.test",
+        "phone": "555-0117"
+      },
+      "proposedOutcome": {
+        "outcome": "goal_achieved",
+        "outputs": {
+          "address": "282 Cobalt Avenue",
+          "city_postcode": "Fenwick Bay ZX30 1DR",
+          "customer_id": "C483704",
+          "customer_name": "Halima Achterberg",
+          "email": "halima.achterberg12@example.test",
+          "phone": "555-0117"
+        },
+        "summary": "Successfully found Halima Achterberg by searching for her name. The search returned only one result, confirming the correct customer was selected. Opened her customer profile and extracted her customer ID (C483704) and contact details including address (282 Cobalt Avenue, Fenwick Bay ZX30 1DR), email (halima.achterberg12@example.test), and phone number (555-0117) without making any changes to the records."
+      },
+      "status": "goal_achieved",
+      "summary": "Successfully found Halima Achterberg by searching for her name. The search returned only one result, confirming the correct customer was selected. Opened her customer profile and extracted her customer ID (C483704) and contact details including address (282 Cobalt Avenue, Fenwick Bay ZX30 1DR), email (halima.achterberg12@example.test), and phone number (555-0117) without making any changes to the records.",
+      "toolCallsUsed": 8
+    },
+    "progress": {
+      "last_event_sequence": 43,
+      "current_step_id": null,
+      "completed_steps": null,
+      "total_steps": null
+    },
+    "created_at": "2026-10-14T18:54:04.528764Z",
+    "started_at": "2026-10-14T18:54:04.556794Z",
+    "finished_at": "2026-10-14T18:58:43.792443Z"
+  },
+  {
+    "access_policy": "READ_ONLY",
+    "run_id": "f90d2d48-f723-42b4-ad6b-12605303c930",
+    "kind": "replay",
+    "purpose": "validation",
+    "app_deployment_id": "60799cd6-75f7-492e-8257-27280a3154f9",
+    "deployment_snapshot": {
+      "app_deployment_id": "60799cd6-75f7-492e-8257-27280a3154f9",
+      "base_url": "https://legacy-account-servicing.lovable.app",
+      "config_version": 1,
+      "environment": "production",
+      "product_id": "meridian-testbed",
+      "tenant_id": "33794363-82e8-4e1c-b2ce-799c7314a26a",
+      "ui_variant": "classic",
+      "vendor_release": "1.0"
+    },
+    "capability_id": null,
+    "task": null,
+    "inputs": {
+      "customer_name": "Halima Achterberg"
+    },
+    "pinned_artifact_id": "3054a0ec-043f-409c-8831-ba2eb007e5fa",
+    "artifact_version": null,
+    "artifact_definition_sha256": "7bf6ba9388609eb2e57b649bada1a0188a24b4d009d2d3a87937ef92e5e0eb07",
+    "finalized_artifact_id": null,
+    "parent_run_id": "5541ec6e-dc77-49ea-85ef-9f623fe29573",
+    "binding_id": null,
+    "binding_version": null,
+    "binding_snapshot": null,
+    "selection_source": "validation",
+    "status": "completed",
+    "outcome": {
+      "kind": "success",
+      "code": "GOAL_ACHIEVED",
+      "message": "Saved flow completed with verified checks",
+      "outputs": {
+        "address": "282 Cobalt Avenue",
+        "city_postcode": "Fenwick Bay ZX30 1DR",
+        "customer_id": "C483704",
+        "customer_name": "Halima Achterberg",
+        "email": "halima.achterberg12@example.test",
+        "phone": "555-0117"
+      },
+      "failure_stage": null,
+      "step_id": "step_6",
+      "expected": null,
+      "observed": null,
+      "dispatch_state": "completed"
+    },
+    "stop_reason": null,
+    "runtime_result": {
+      "code": "GOAL_ACHIEVED",
+      "dispatch_state": "completed",
+      "expected": null,
+      "failure_stage": null,
+      "message": "Saved flow completed with verified checks",
+      "observed": null,
+      "outputs": {
+        "address": "282 Cobalt Avenue",
+        "city_postcode": "Fenwick Bay ZX30 1DR",
+        "customer_id": "C483704",
+        "customer_name": "Halima Achterberg",
+        "email": "halima.achterberg12@example.test",
+        "phone": "555-0117"
+      },
+      "status": "success",
+      "step_id": "step_6"
+    },
+    "progress": {
+      "last_event_sequence": 29,
+      "current_step_id": "step_6",
+      "completed_steps": 6,
+      "total_steps": 6
+    },
+    "created_at": "2026-10-14T18:58:34.250814Z",
+    "started_at": "2026-10-14T18:58:34.275781Z",
+    "finished_at": "2026-10-14T18:58:43.767005Z"
+  },
+  {
+    "access_policy": "READ_ONLY",
+    "run_id": "5c8b0840-7270-4464-ab0e-3e457d435eed",
+    "kind": "replay",
+    "purpose": "user",
+    "app_deployment_id": "60799cd6-75f7-492e-8257-27280a3154f9",
+    "deployment_snapshot": {
+      "app_deployment_id": "60799cd6-75f7-492e-8257-27280a3154f9",
+      "base_url": "https://legacy-account-servicing.lovable.app",
+      "config_version": 1,
+      "environment": "production",
+      "product_id": "meridian-testbed",
+      "tenant_id": "33794363-82e8-4e1c-b2ce-799c7314a26a",
+      "ui_variant": "classic",
+      "vendor_release": "1.0"
+    },
+    "capability_id": "a0703f44-eb48-4757-961f-09d7bbacb8a8",
+    "task": null,
+    "inputs": {
+      "customer_name": "Tomas Achterberg"
+    },
+    "pinned_artifact_id": "3054a0ec-043f-409c-8831-ba2eb007e5fa",
+    "artifact_version": 1,
+    "artifact_definition_sha256": "7bf6ba9388609eb2e57b649bada1a0188a24b4d009d2d3a87937ef92e5e0eb07",
+    "finalized_artifact_id": null,
+    "parent_run_id": null,
+    "binding_id": "5610278d-e531-45a7-ba63-cffa226f1c5b",
+    "binding_version": 1,
+    "binding_snapshot": {
+      "app_deployment_id": "60799cd6-75f7-492e-8257-27280a3154f9",
+      "artifact_id": "3054a0ec-043f-409c-8831-ba2eb007e5fa",
+      "binding_id": "5610278d-e531-45a7-ba63-cffa226f1c5b",
+      "binding_version": 1,
+      "capability_id": "a0703f44-eb48-4757-961f-09d7bbacb8a8",
+      "created_at": "2026-10-14T18:58:43.791403Z",
+      "deployment_config_version": 1,
+      "retired_at": null,
+      "selection_note": "Initial validated publication",
+      "state": "ready",
+      "validation_run_id": "f90d2d48-f723-42b4-ad6b-12605303c930"
+    },
+    "selection_source": "explicit_artifact",
+    "status": "completed",
+    "outcome": {
+      "kind": "success",
+      "code": "GOAL_ACHIEVED",
+      "message": "Saved flow completed with verified checks",
+      "outputs": {
+        "address": "9 Larkspur Way",
+        "city_postcode": "Eastholme ZX37 6CQ",
+        "customer_id": "C135291",
+        "customer_name": "Tomas Achterberg",
+        "email": "tomas.achterberg59@example.test",
+        "phone": "555-0180"
+      },
+      "failure_stage": null,
+      "step_id": "step_6",
+      "expected": null,
+      "observed": null,
+      "dispatch_state": "completed"
+    },
+    "stop_reason": null,
+    "runtime_result": {
+      "code": "GOAL_ACHIEVED",
+      "dispatch_state": "completed",
+      "expected": null,
+      "failure_stage": null,
+      "message": "Saved flow completed with verified checks",
+      "observed": null,
+      "outputs": {
+        "address": "9 Larkspur Way",
+        "city_postcode": "Eastholme ZX37 6CQ",
+        "customer_id": "C135291",
+        "customer_name": "Tomas Achterberg",
+        "email": "tomas.achterberg59@example.test",
+        "phone": "555-0180"
+      },
+      "status": "success",
+      "step_id": "step_6"
+    },
+    "progress": {
+      "last_event_sequence": 29,
+      "current_step_id": "step_6",
+      "completed_steps": 6,
+      "total_steps": 6
+    },
+    "created_at": "2026-10-14T18:59:34.316838Z",
+    "started_at": "2026-10-14T18:59:34.336090Z",
+    "finished_at": "2026-10-14T18:59:42.783857Z"
+  },
+  {
+    "access_policy": "READ_ONLY",
+    "run_id": "0e190104-fca8-4e29-b086-b9f1e6407749",
+    "kind": "replay",
+    "purpose": "user",
+    "app_deployment_id": "60799cd6-75f7-492e-8257-27280a3154f9",
+    "deployment_snapshot": {
+      "app_deployment_id": "60799cd6-75f7-492e-8257-27280a3154f9",
+      "base_url": "https://legacy-account-servicing.lovable.app",
+      "config_version": 1,
+      "environment": "production",
+      "product_id": "meridian-testbed",
+      "tenant_id": "33794363-82e8-4e1c-b2ce-799c7314a26a",
+      "ui_variant": "classic",
+      "vendor_release": "1.0"
+    },
+    "capability_id": "a0703f44-eb48-4757-961f-09d7bbacb8a8",
+    "task": null,
+    "inputs": {
+      "customer_name": "Demo Missing Customer 999999"
+    },
+    "pinned_artifact_id": "3054a0ec-043f-409c-8831-ba2eb007e5fa",
+    "artifact_version": 1,
+    "artifact_definition_sha256": "7bf6ba9388609eb2e57b649bada1a0188a24b4d009d2d3a87937ef92e5e0eb07",
+    "finalized_artifact_id": null,
+    "parent_run_id": null,
+    "binding_id": "5610278d-e531-45a7-ba63-cffa226f1c5b",
+    "binding_version": 1,
+    "binding_snapshot": {
+      "app_deployment_id": "60799cd6-75f7-492e-8257-27280a3154f9",
+      "artifact_id": "3054a0ec-043f-409c-8831-ba2eb007e5fa",
+      "binding_id": "5610278d-e531-45a7-ba63-cffa226f1c5b",
+      "binding_version": 1,
+      "capability_id": "a0703f44-eb48-4757-961f-09d7bbacb8a8",
+      "created_at": "2026-10-14T18:58:43.791403Z",
+      "deployment_config_version": 1,
+      "retired_at": null,
+      "selection_note": "Initial validated publication",
+      "state": "ready",
+      "validation_run_id": "f90d2d48-f723-42b4-ad6b-12605303c930"
+    },
+    "selection_source": "explicit_artifact",
+    "status": "failed",
+    "outcome": {
+      "kind": "hard_failure",
+      "code": "HUMAN_REVIEW_REJECTED",
+      "message": "Saved flow could not be verified",
+      "outputs": null,
+      "failure_stage": "execution",
+      "step_id": "step_5",
+      "expected": null,
+      "observed": null,
+      "dispatch_state": "not_dispatched"
+    },
+    "stop_reason": null,
+    "runtime_result": {
+      "code": "HUMAN_REVIEW_REJECTED",
+      "dispatch_state": "not_dispatched",
+      "expected": null,
+      "failure_stage": "execution",
+      "message": "Saved flow could not be verified",
+      "observed": null,
+      "outputs": null,
+      "status": "hard_failure",
+      "step_id": "step_5"
+    },
+    "progress": {
+      "last_event_sequence": 23,
+      "current_step_id": "step_5",
+      "completed_steps": 4,
+      "total_steps": 6
+    },
+    "created_at": "2026-10-14T19:00:38.817140Z",
+    "started_at": "2026-10-14T19:00:38.834543Z",
+    "finished_at": "2026-10-14T19:01:51.562072Z"
+  }
+]
