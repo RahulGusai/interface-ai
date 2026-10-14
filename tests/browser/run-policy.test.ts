@@ -95,7 +95,7 @@ async function setup(accessPolicy: "READ_ONLY" | "READ_WRITE" = "READ_ONLY") {
   return { adapter, observation: observation(response) };
 }
 it.each(["READ_ONLY", "READ_WRITE"] as const)(
-  "known mutation is gated before dispatch under %s",
+  "known mutation executes at the adapter boundary under %s",
   async (policy) => {
     const { adapter, observation: o } = await setup(policy);
     const before = writes;
@@ -109,16 +109,14 @@ it.each(["READ_ONLY", "READ_WRITE"] as const)(
         name: "click",
         input: { observation_id: o.observation_id, target },
       });
-      expect(r.result.status).toBe(
-        policy === "READ_ONLY" ? "policy_blocked" : "completed",
-      );
-      expect(writes - before).toBe(policy === "READ_ONLY" ? 0 : 1);
+      expect(r.result.status).toBe("completed");
+      expect(writes - before).toBe(1);
     } finally {
       await adapter.close();
     }
   },
 );
-it.each(["READ_ONLY", "READ_WRITE"] as const)(
+it.each(["READ_WRITE"] as const)(
   "a Search label cannot authorize an unknown effect under %s",
   async (policy) => {
     const { adapter, observation: o } = await setup(policy);
@@ -205,7 +203,7 @@ it("read-only search and profile retrieval work while external assets load", asy
 it.each(["/redirect", "/redirect-chain", "link", "popup"])(
   "blocks off-host %s before a foreign document request",
   async (path) => {
-    const { adapter, observation: o } = await setup();
+    const { adapter, observation: o } = await setup("READ_WRITE");
     const before = foreignDocuments;
     try {
       const r = path.startsWith("/")
@@ -236,7 +234,7 @@ it.each(["/redirect", "/redirect-chain", "link", "popup"])(
     }
   },
 );
-it("typing into an autosaving record is blocked before input events", async () => {
+it("READ_ONLY permits autosaving input without trusted-rule enforcement", async () => {
   const { adapter, observation: o } = await setup();
   const before = writes;
   try {
@@ -257,11 +255,8 @@ it("typing into an autosaving record is blocked before input events", async () =
         mode: "replace",
       },
     });
-    expect(r.result).toMatchObject({
-      code: "ACCESS_POLICY_VIOLATION",
-      policy: { category: "mutation" },
-    });
-    expect(writes).toBe(before);
+    expect(r.result.status).toBe("completed");
+    expect(writes).toBe(before + 1);
   } finally {
     await adapter.close();
   }
@@ -280,7 +275,7 @@ it("an asynchronous navigation breach terminates discovery while a model request
   const events: unknown[] = [];
   try {
     const running = runTask(
-      { goal: "Wait", targetUrl: fixture.url },
+      { goal: "Wait", targetUrl: fixture.url, accessPolicy: "READ_WRITE" },
       {
         adapterFactory: {
           async createForTask(input) {
@@ -288,7 +283,7 @@ it("an asynchronous navigation breach terminates discovery while a model request
               headless: true,
               runPolicy: {
                 baseUrl: input.targetUrl,
-                accessPolicy: "READ_ONLY",
+                accessPolicy: "READ_WRITE",
               },
             }));
           },
@@ -326,6 +321,7 @@ it.each(["READ_ONLY", "READ_WRITE"] as const)(
     };
     const before = writes;
     const events: unknown[] = [];
+    const reviews: string[] = [];
     const definition = {
       surface: "browser",
       compatibility: {
@@ -393,40 +389,23 @@ it.each(["READ_ONLY", "READ_WRITE"] as const)(
         }),
       },
       {
-        review: async () => ({ status: "approved", review_id: "test-review" }),
+        review: async (request) => {
+          reviews.push(request.tool);
+          return { status: "approved", review_id: "test-review" };
+        },
         onAudit: async (type, payload) => {
           events.push({ type, payload });
         },
       },
     );
-    expect(r.status).toBe(
-      access_policy === "READ_ONLY" ? "hard_failure" : "success",
-    );
-    if (access_policy === "READ_ONLY") {
-      expect(r).toMatchObject({
-        code: "ACCESS_POLICY_VIOLATION",
-        dispatch_state: "not_dispatched",
-      });
-      expect(events).toContainEqual(
-        expect.objectContaining({
-          type: "tool_finished",
-          payload: expect.objectContaining({
-            result: expect.objectContaining({
-              policy: expect.objectContaining({
-                access_policy,
-                category: "mutation",
-              }),
-            }),
-          }),
-        }),
-      );
-    }
-    expect(writes - before).toBe(access_policy === "READ_ONLY" ? 0 : 1);
+    expect(r.status).toBe("success");
+    expect(reviews).toEqual(access_policy === "READ_ONLY" ? [] : ["click"]);
+    expect(writes - before).toBe(1);
   },
 );
 
 it("unsupported popup is denied before even its same-host redirect can dispatch", async () => {
-  const { adapter, observation: o } = await setup();
+  const { adapter, observation: o } = await setup("READ_WRITE");
   const before = foreignDocuments;
   try {
     if (o.controls.status !== "available") throw Error();
@@ -524,6 +503,11 @@ it("a breach during business-outcome audit remains a replay failure", async () =
     steps: [
       {
         step_id: "lookup",
+        execution: {
+          decision: "auto_approve",
+          confidence: 1,
+          reason: "Synthetic read",
+        },
         tool: "click",
         arguments: {},
         target: {
@@ -568,6 +552,7 @@ it("a breach during business-outcome audit remains a replay failure", async () =
   try {
     const result = await runReplay(
       {
+        access_policy: "READ_WRITE",
         artifact: { definition },
         inputs: {},
         deployment: {
@@ -623,7 +608,7 @@ it("networkless child documents cannot bypass the hostname policy", async () => 
   );
   const adapter = await BrowserAdapter.create({
     headless: true,
-    runPolicy: { baseUrl: fixture.url, accessPolicy: "READ_ONLY" },
+    runPolicy: { baseUrl: fixture.url, accessPolicy: "READ_WRITE" },
   });
   try {
     expect(
@@ -635,7 +620,7 @@ it("networkless child documents cannot bypass the hostname policy", async () => 
     await fixture.close();
   }
 });
-it.each(["READ_ONLY", "READ_WRITE"] as const)(
+it.each(["READ_WRITE"] as const)(
   "unclassified native confirmation is never accepted under %s",
   async (accessPolicy) => {
     const fixture = await startFixture(

@@ -1,6 +1,4 @@
 import {
-  accessDecision,
-  intrinsicClassification,
   sameHostname,
   violationResponse,
   type AccessPolicy,
@@ -32,6 +30,7 @@ export async function dispatchTool(
   context: DispatchContext,
   call: ToolCall,
 ): Promise<ToolResponse> {
+  const policy = context.accessPolicy ?? "READ_ONLY";
   let action;
   let execution: unknown;
   try {
@@ -50,7 +49,8 @@ export async function dispatchTool(
       },
     };
   }
-  const pendingViolation = context.adapter.policyViolation?.();
+  const pendingViolation =
+    policy === "READ_WRITE" ? context.adapter.policyViolation?.() : undefined;
   if (pendingViolation) {
     context.halted = true;
     return violationResponse(pendingViolation);
@@ -76,8 +76,8 @@ export async function dispatchTool(
     };
   context.busy = true;
   try {
-    const policy = context.accessPolicy ?? "READ_ONLY";
     if (
+      policy === "READ_WRITE" &&
       action.name === "navigate" &&
       (!context.allowedHostname ||
         !sameHostname(action.input.url, context.allowedHostname))
@@ -90,18 +90,6 @@ export async function dispatchTool(
         reason: "Page navigation must remain on the deployment hostname",
         dispatch_state: "not_dispatched",
       });
-    }
-    const classification = intrinsicClassification(action) ??
-      (action.name !== "finish_task" && action.name !== "request_human"
-        ? await context.adapter.classifyAction?.(action)
-        : undefined) ?? {
-        category: "unknown" as const,
-        reason: "No trusted rule for the current action and target",
-      };
-    const violation = accessDecision(policy, classification);
-    if (violation && policy === "READ_ONLY") {
-      context.halted = true;
-      return violationResponse(violation);
     }
     let reviewed = false;
     if (
@@ -145,7 +133,8 @@ export async function dispatchTool(
       reviewed = true;
     }
     context.signal?.throwIfAborted();
-    const pending = context.adapter.policyViolation?.();
+    const pending =
+      policy === "READ_WRITE" ? context.adapter.policyViolation?.() : undefined;
     if (pending) {
       context.halted = true;
       return violationResponse(pending);
@@ -169,7 +158,8 @@ export async function dispatchTool(
             }
           : await executeTool(context.adapter, action);
     if (response.result.status === "policy_blocked") context.halted = true;
-    const after = context.adapter.policyViolation?.();
+    const after =
+      policy === "READ_WRITE" ? context.adapter.policyViolation?.() : undefined;
     if (after) {
       context.halted = true;
       return violationResponse(after);
@@ -183,7 +173,8 @@ export async function dispatchTool(
     return validateToolResponse(action.name, response);
   } catch (error) {
     context.halted = true;
-    const violation = context.adapter.policyViolation?.();
+    const violation =
+      policy === "READ_WRITE" ? context.adapter.policyViolation?.() : undefined;
     if (violation) return violationResponse(violation);
     return {
       result: {

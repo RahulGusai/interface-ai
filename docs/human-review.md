@@ -4,18 +4,20 @@ This implements the agreed take-home flow. Both Lovable apps are deferred. Node 
 
 ## Routing
 
-Each LLM tool call carries `execution: {decision, confidence, reason}`. The system prompt describes assessment of the proposed effect, current UI, target (including points), arguments and policy. Tool schemas require it; the runtime handles missing/invalid metadata conservatively.
+Each READ_WRITE LLM tool call carries `execution: {decision, confidence, reason}`. The system prompt describes assessment of the proposed effect, current UI, target (including points), arguments and policy. Tool schemas require it; the runtime handles missing/invalid metadata conservatively.
 
 | Effective policy / assessment | Behavior |
 |---|---|
-| READ_ONLY | Existing trusted read rules; mutations/unknown effects hard fail; no approval flow |
+| READ_ONLY | Bypass action/domain policy, trusted rules and assessments; no approval flow |
 | READ_WRITE + `requires_human_review` | Review at any confidence |
 | READ_WRITE + `auto_approve`, confidence < 0.3 | Review |
 | READ_WRITE + `auto_approve`, confidence >= 0.3 | Execute after hard checks |
 | READ_WRITE + missing/invalid assessment | Review |
-| Hard domain/browser/target violation | Stop; approval cannot override |
+| READ_WRITE hard domain violation or browser/target blocker | Stop; approval cannot override |
 
-Runtime-owned entry navigation uses an explicit auto assessment. `request_human` in READ_WRITE always reviews and returns an approved tool result before the agent continues; it supplies no manual target choice or typed user instructions. In READ_ONLY its previous terminal behavior remains.
+READ_ONLY provider prompts and tool schemas omit execution assessments; supplied assessments are ignored and discovery records no assessment. Its browser skips action/domain interception and uses normal dialog mechanics. Stale references, target validity, tool limits and completion checks still apply.
+
+READ_WRITE runtime-owned entry navigation uses an explicit auto assessment. `request_human` in READ_WRITE always reviews and returns an approved tool result before the agent continues; it supplies no manual target choice or typed user instructions. In READ_ONLY its previous terminal behavior remains.
 
 ## Persistence and HTTP
 
@@ -45,7 +47,7 @@ The screen check is conservative: animation or changing text can require another
 
 ## Replay
 
-Each artifact step saves its discovery execution assessment. Replay reuses it, resolves fresh inputs and targets and applies the current policy without an LLM call. A review-required step creates a new review for each run (including validation), with its current screenshot and arguments. Approvals are never stored as artifact permission. Legacy steps lacking assessments require review in READ_WRITE.
+READ_WRITE artifact steps save their discovery execution assessment. Replay resolves fresh inputs and targets without an LLM call. READ_WRITE reuses stored assessments; READ_ONLY ignores assessments and bypasses policy/review routing. A review-required step creates a new review for each run (including validation), with its current screenshot and arguments. Approvals are never stored as artifact permission. Legacy steps lacking assessments require review in READ_WRITE.
 
 Stored assessment is not a fresh semantic risk evaluation: changed inputs, context or application behavior can make it stale. This limitation, self-reported model confidence, and the future need for re-assessment or deterministic rules are recorded in REPORT.md.
 
@@ -54,3 +56,5 @@ Stored assessment is not a fresh semantic risk evaluation: changed inputs, conte
 Tests use local synthetic applications. Coverage includes the 0.3 boundary, missing/invalid assessments, point/control targets, context changes, real HTTP polling with the Node subprocess and Chromium, PNG persistence, approve-and-complete, rejection/expiry/cancel without writes, and the occupied sequential execution slot. Storage SDK calls are substituted in the end-to-end tests; they do not constitute hosted MinIO, live model or deployment verification.
 
 Verified on 2026-10-11 with Node 22.19.0 and Python 3.12: 229 Node tests passed, one opt-in live-provider test skipped; all 60 backend tests passed. TypeScript typecheck, Ruff, changed-TypeScript Prettier, generated OpenAPI/artifact-schema comparisons and `git diff --check` passed. The backend reports the existing Starlette/httpx deprecation warning. A separate reviewer identified the deadline issue; both reproductions failed before the fix, passed afterward, and the reviewer accepted the correction.
+
+Verified the READ_ONLY bypass on 2026-10-14 with Node 22.19.0: 237 runtime tests passed and the opt-in live-provider test was skipped; all 60 backend tests passed. Typecheck, changed-TypeScript Prettier, Ruff, changed-Python formatting and `git diff --check` passed. Regression coverage includes production-factory search without rules or assessment, point writes, domain redirects, native dialogs, provider schemas, stale references, and Python/Node replay; READ_WRITE review and domain gates remain covered.

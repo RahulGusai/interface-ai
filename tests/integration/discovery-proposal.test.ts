@@ -163,7 +163,7 @@ it.each(["READ_ONLY", "READ_WRITE"] as const)(
       ]);
       const modelCalls = step;
       expect(discovery.artifact?.definition.steps[2]?.execution?.decision).toBe(
-        "requires_human_review",
+        accessPolicy === "READ_WRITE" ? "requires_human_review" : undefined,
       );
       const replay = await runReplay(
         {

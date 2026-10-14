@@ -42,6 +42,7 @@ import {
 } from "./discovery-bindings.js";
 import {
   toolDefinitions,
+  toolDefinitionsForPolicy,
   toolSchemas,
   parseToolAction,
   type ToolResponse,
@@ -71,6 +72,9 @@ export async function runTask(
   } = {},
 ): Promise<RunResult> {
   const input: TaskInput = parseTaskInput(raw);
+  const definitions = toolDefinitionsForPolicy(
+    input.accessPolicy ?? "READ_ONLY",
+  );
   if (options.discovery) delete options.discovery.artifact;
   const contract = deps.contract ?? {};
   const budget = maxToolCalls(options.maxToolCalls);
@@ -84,7 +88,7 @@ export async function runTask(
   const pendingCorrections: { code: string; content: string }[] = [];
   const getDefinitions = () =>
     options.discovery
-      ? toolDefinitions
+      ? definitions
           .map((d) => {
             const name = d.function.name;
             const original = (d.function.parameters as any).properties;
@@ -309,7 +313,7 @@ export async function runTask(
               (d.function.parameters as any).properties.fields.items.properties
                 .target.properties.control_ref.enum.length > 0,
           )
-      : toolDefinitions;
+      : definitions;
   const audit: AuditSink = async (record, image) => {
     if (auditFailed) throw new Error("Audit unavailable");
     try {
@@ -333,7 +337,12 @@ export async function runTask(
     let preflight: ToolResponse | undefined;
     try {
       parsed = JSON.parse(call.argumentsJson);
-      execution = source === "bootstrap" ? entryAssessment : parsed?.execution;
+      execution =
+        input.accessPolicy === "READ_WRITE"
+          ? source === "bootstrap"
+            ? entryAssessment
+            : parsed?.execution
+          : undefined;
       if (parsed && typeof parsed === "object") delete parsed.execution;
     } catch {
       parsed = null;

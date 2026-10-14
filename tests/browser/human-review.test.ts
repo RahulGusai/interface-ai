@@ -136,14 +136,14 @@ it("missing assessment is reviewed and rejection performs no write", async () =>
     await adapter.close();
   }
 });
-it("READ_ONLY ignores auto approval and still denies unknown clicks", async () => {
+it("READ_ONLY bypasses review and executes unknown clicks", async () => {
   const { adapter, context, o } = await setup("READ_ONLY");
   const before = writes;
   try {
     expect((await dispatchTool(context, call(o, 1))).result.status).toBe(
-      "policy_blocked",
+      "completed",
     );
-    expect(writes).toBe(before);
+    expect(writes).toBe(before + 1);
   } finally {
     await adapter.close();
   }

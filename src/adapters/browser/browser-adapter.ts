@@ -195,6 +195,7 @@ export class BrowserAdapter implements BrowserAdapterPort {
   ) {}
   static async create(options: Partial<BrowserOptions> = {}) {
     const config = { ...browserDefaults, ...options };
+    const enforcePolicy = config.runPolicy?.accessPolicy === "READ_WRITE";
     const browser = await chromium.launch({
       headless: config.headless,
       slowMo: config.slowMo,
@@ -203,7 +204,7 @@ export class BrowserAdapter implements BrowserAdapterPort {
       const context = await browser.newContext({
         viewport: config.viewport,
         deviceScaleFactor: config.deviceScaleFactor,
-        serviceWorkers: config.runPolicy ? "block" : "allow",
+        serviceWorkers: enforcePolicy ? "block" : "allow",
         acceptDownloads: true,
       });
       const page = await context.newPage();
@@ -214,7 +215,7 @@ export class BrowserAdapter implements BrowserAdapterPort {
         context,
         page,
         adapter.state,
-        config.runPolicy
+        enforcePolicy
           ? () =>
               adapter.breach({
                 code: "ACCESS_POLICY_VIOLATION",
@@ -225,7 +226,7 @@ export class BrowserAdapter implements BrowserAdapterPort {
               })
           : undefined,
       );
-      if (config.runPolicy)
+      if (enforcePolicy && config.runPolicy)
         await installNavigationPolicy(
           context,
           page,
@@ -448,7 +449,7 @@ export class BrowserAdapter implements BrowserAdapterPort {
   }
   private async enforce(action: BrowserAction, target?: Resolved) {
     const policy = this.options.runPolicy;
-    if (!policy) return;
+    if (!policy || policy.accessPolicy === "READ_ONLY") return;
     if (this.violation)
       throw new SafeError(this.violation.code, this.violation.reason);
     if (

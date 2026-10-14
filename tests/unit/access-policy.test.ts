@@ -3,7 +3,7 @@ import { dispatchTool } from "../../src/runtime/dispatch.js";
 import { makeFakeAdapter } from "../helpers/fake-adapter.js";
 
 it.each(["READ_ONLY", "READ_WRITE"] as const)(
-  "unknown effects without assessment fail closed under %s",
+  "unknown effects without assessment use the selected policy %s",
   async (accessPolicy) => {
     const adapter = makeFakeAdapter();
     Object.assign(adapter, {
@@ -34,14 +34,10 @@ it.each(["READ_ONLY", "READ_WRITE"] as const)(
     expect(result.result).toMatchObject(
       accessPolicy === "READ_WRITE"
         ? { status: "error", code: "HUMAN_REVIEW_UNAVAILABLE" }
-        : {
-            status: "policy_blocked",
-            code: "ACCESS_POLICY_VIOLATION",
-            policy: { access_policy: accessPolicy, category: "unknown" },
-          },
+        : { status: "completed" },
     );
-    expect(adapter.calls).toHaveLength(0);
-    expect(context.halted).toBe(true);
+    expect(adapter.calls).toHaveLength(accessPolicy === "READ_ONLY" ? 1 : 0);
+    expect(context.halted).toBe(accessPolicy === "READ_WRITE");
   },
 );
 it.each([
@@ -55,6 +51,7 @@ it.each([
     busy: false,
     halted: false,
     allowedHostname: "example.org",
+    accessPolicy: "READ_WRITE" as const,
   };
   const response = await dispatchTool(context, {
     id: "x",
@@ -65,7 +62,7 @@ it.each([
   expect(adapter.calls).toHaveLength(0);
 });
 it.each(["READ_ONLY", "READ_WRITE"] as const)(
-  "known mutation has one central policy decision under %s",
+  "auto-approved calls execute under %s",
   async (accessPolicy) => {
     const adapter = makeFakeAdapter();
     Object.assign(adapter, {
@@ -96,25 +93,16 @@ it.each(["READ_ONLY", "READ_WRITE"] as const)(
         },
       }),
     });
-    expect(response.result.status).toBe(
-      accessPolicy === "READ_ONLY" ? "policy_blocked" : "completed",
-    );
-    expect(adapter.calls.length).toBe(accessPolicy === "READ_ONLY" ? 0 : 1);
+    expect(response.result.status).toBe("completed");
+    expect(adapter.calls.length).toBe(1);
   },
 );
 
 import { runTask } from "../../src/runtime/run-task.js";
 import type { DiscoveryContext } from "../../src/runtime/discovery-context.js";
 import type { AuditRecord } from "../../src/runtime/audit.js";
-it("discovery audits policy rejection, stops the batch, and cannot build an artifact", async () => {
+it("READ_WRITE discovery audits domain rejection, stops the batch, and cannot build an artifact", async () => {
   const adapter = makeFakeAdapter();
-  const classify = adapter.classifyAction.bind(adapter);
-  Object.assign(adapter, {
-    classifyAction: async (action: { name: string }) =>
-      action.name === "navigate"
-        ? classify()
-        : { category: "mutation", reason: "Trusted save handler" },
-  });
   const discovery: DiscoveryContext = {
     deployment: {
       app_deployment_id: "test",
@@ -142,7 +130,11 @@ it("discovery audits policy rejection, stops the batch, and cannot build an arti
   };
   const audits: AuditRecord[] = [];
   const r = await runTask(
-    { goal: "Save", targetUrl: discovery.deployment.base_url },
+    {
+      goal: "Inspect",
+      targetUrl: discovery.deployment.base_url,
+      accessPolicy: "READ_WRITE",
+    },
     {
       adapterFactory: { createForTask: async () => adapter },
       model: {
@@ -150,14 +142,13 @@ it("discovery audits policy rejection, stops the batch, and cannot build an arti
         async complete() {
           const o = (await adapter.capture()).observation;
           if (o.status !== "ok") throw Error();
-          // No durable target recording is needed for a global key action.
+          // Domain rejection precedes assessment review and dispatch.
           const calls = [
             {
               id: "save",
-              name: "press_key",
+              name: "navigate",
               argumentsJson: JSON.stringify({
-                observation_id: o.observation_id,
-                keys: ["Enter"],
+                url: "https://elsewhere.example.test",
               }),
             },
             {
@@ -186,7 +177,7 @@ it("discovery audits policy rejection, stops the batch, and cannot build an arti
   );
   expect(r).toMatchObject({
     status: "policy_blocked",
-    error: { code: "ACCESS_POLICY_VIOLATION" },
+    error: { code: "DOMAIN_POLICY_VIOLATION" },
   });
   expect(adapter.calls.map((c) => c.name)).toEqual(["navigate"]);
   expect(discovery.artifact).toBeUndefined();
@@ -195,8 +186,8 @@ it("discovery audits policy rejection, stops the batch, and cannot build an arti
       type: "tool_finished",
       result: expect.objectContaining({
         policy: expect.objectContaining({
-          access_policy: "READ_ONLY",
-          category: "mutation",
+          access_policy: "READ_WRITE",
+          category: "unknown",
           dispatch_state: "not_dispatched",
         }),
       }),

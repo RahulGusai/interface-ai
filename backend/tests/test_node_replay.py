@@ -16,7 +16,7 @@ from interface_api.evidence import Evidence
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("policy", ["READ_ONLY", "READ_WRITE"])
-async def test_node_replay_persists_real_png_and_rejects_unknown_effects(
+async def test_node_replay_persists_real_png_and_applies_selected_policy(
     repo, tmp_path, policy
 ):
     html = (REPO_ROOT / "tests/fixtures/replay-member-desk/index.html").read_bytes()
@@ -101,14 +101,14 @@ async def test_node_replay_persists_real_png_and_rejects_unknown_effects(
             return {"event_sequence": row["sequence"], "continue": True}
 
         completion = await runner.run(command, sink, asyncio.Event())
-        assert completion["runtime_result"]["status"] == "hard_failure", completion
-        assert completion["runtime_result"]["code"] == (
-            "ACCESS_POLICY_VIOLATION"
-            if policy == "READ_ONLY"
-            else "HUMAN_REVIEW_UNAVAILABLE"
-        )
-        assert completion["runtime_result"]["dispatch_state"] == "not_dispatched"
-        assert completion["runtime_result"]["outputs"] is None
+        if policy == "READ_ONLY":
+            assert completion["runtime_result"]["status"] == "success", completion
+            assert completion["runtime_result"]["outputs"] == {"status": "Pending"}
+        else:
+            assert completion["runtime_result"]["status"] == "hard_failure", completion
+            assert completion["runtime_result"]["code"] == "HUMAN_REVIEW_UNAVAILABLE"
+            assert completion["runtime_result"]["dispatch_state"] == "not_dispatched"
+            assert completion["runtime_result"]["outputs"] is None
         assets = repo.rows("evidence_assets", order="event_sequence")
         assert assets and all(a["width"] == 1280 and a["height"] == 800 for a in assets)
         events = repo.rows("run_events", "run_id=?", (run["run_id"],), "sequence ASC")
@@ -116,13 +116,9 @@ async def test_node_replay_persists_real_png_and_rejects_unknown_effects(
             e
             for e in events
             if e["type"] == "tool_finished"
-            and e["payload"]["result"]["status"]
-            == ("policy_blocked" if policy == "READ_ONLY" else "error")
+            and e["payload"]["result"]["status"] in ("policy_blocked", "error")
         ]
-        assert len(rejected) == 1
-        if policy == "READ_ONLY":
-            assert rejected[0]["payload"]["result"]["policy"]["access_policy"] == policy
-            assert rejected[0]["payload"]["result"]["policy"]["category"] == "unknown"
+        assert len(rejected) == (0 if policy == "READ_ONLY" else 1)
         assert [e["sequence"] for e in events] == list(range(1, len(events) + 1))
         assert not list(staging.glob("*.png")) and not any(
             "model_proposed" == e["type"] for e in events

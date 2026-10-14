@@ -43,10 +43,8 @@ export function accessDecision(
   policy: AccessPolicy,
   classification: Classification,
 ): PolicyViolation | undefined {
-  if (
-    classification.category === "unknown" ||
-    (classification.category === "mutation" && policy === "READ_ONLY")
-  )
+  if (policy === "READ_ONLY") return;
+  if (classification.category === "unknown")
     return {
       code: "ACCESS_POLICY_VIOLATION",
       access_policy: policy,

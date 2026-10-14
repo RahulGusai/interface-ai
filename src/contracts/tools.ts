@@ -152,15 +152,17 @@ const descriptions: Record<ToolName, string> = {
   finish_task:
     "Report the terminal outcome and a meaningful summary. For goal_achieved, outputs must be an object (use {} if empty). No observation_id or proposal is needed; the runtime builds the artifact from recorded actions. Correct only invalid required fields after rejection.",
 };
-export const toolDefinitions = Object.entries(toolSchemas).map(
-  ([name, schema]) => ({
+function buildToolDefinitions(requireAssessment: boolean) {
+  return Object.entries(toolSchemas).map(([name, schema]) => ({
     type: "function" as const,
     function: {
       name,
       description: descriptions[name as ToolName],
       parameters: {
         ...z.toJSONSchema(
-          schema.extend({ execution: executionAssessmentSchema }),
+          requireAssessment
+            ? schema.extend({ execution: executionAssessmentSchema })
+            : schema,
           { unrepresentable: "any", io: "input" },
         ),
         ...(name === "finish_task"
@@ -178,8 +180,14 @@ export const toolDefinitions = Object.entries(toolSchemas).map(
           : {}),
       },
     },
-  }),
-);
+  }));
+}
+/** Preserve the assessed contract for READ_WRITE callers. */
+export const toolDefinitions = buildToolDefinitions(true);
+const readOnlyToolDefinitions = buildToolDefinitions(false);
+export function toolDefinitionsForPolicy(policy: "READ_ONLY" | "READ_WRITE") {
+  return policy === "READ_ONLY" ? readOnlyToolDefinitions : toolDefinitions;
+}
 const common = {
   reason: z.string().optional(),
   code: z.string().optional(),
