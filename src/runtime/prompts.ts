@@ -13,7 +13,8 @@ Use relevant input-bound search filters before submitting a search. When the tas
 3. Before leaving an account overview, extract the requested account number AND its ledger/current balance from their separate table cells. If you left too early, navigate back to extract them. Never use a transaction-page summary, transaction total, or running balance for current_balance.
 4. A largest debit must come from debit-filtered results ordered by amount, not a visually chosen arbitrary row. Extract amount, date and description from the first sorted result.
 5. Before finishing, every declared input must have been used successfully through a binding, including branch/location qualifiers. Return to verify any unused qualifier; do not drop it.
-6. After a rejected extraction, choose a different valid source or return to its source page. Repeating the rejected extraction stops the run.`;
+6. After a rejected extraction, choose a different valid source or return to its source page. Repeating the rejected extraction stops the run.
+7. When the task asks to reopen a record after saving and confirm persisted values, navigate through the application to reopen that record BEFORE extracting confirmation. An editable draft field, save notification, or value-only revision summary on the edit form is not a substitute for the labeled fields on the reopened record.`;
 export function buildInitialMessages(
   input: TaskInput,
   promptVersion = "v1",
@@ -60,7 +61,7 @@ export function discoveryCorrection(code: string): string | undefined {
     ROW_RANK_INVALID:
       "The rejected extraction was not executed. Use exactly one of row_match and row_rank. A rank must match the observed table sort column and direction and selected zero-based visible row index. Sort using UI controls first. For largest debit sort Amount, verify the greatest magnitude is first, and extract that first row for amount, date and description.",
     UNLABELED_EXTRACTION_SOURCE:
-      "The rejected extraction was not executed. Its target is named by the current value rather than an independent label. Choose a labeled field or structured table cell from the offered target references. If account facts are missing on the transaction page, click the stable Customer Search navigation link, repeat the bound search and extract separate account-number and ledger-balance cells on the overview. Do not invent record URLs or retry the summary.",
+      "The rejected extraction was not executed. Its target is named by the current value rather than an independent label. Do not resubmit that target. Choose a DIFFERENT labeled field or structured table cell from the offered extract_data target references. If the required labeled source is not on this page, use the application navigation to reopen the record and read its labeled fields there. For post-save confirmation, leave the edit form and reopen the record before extracting; do not read an editable draft, save notification, or value-only revision summary. Do not invent record URLs, repeat completed writes, or retry the rejected summary.",
     TARGET_DEPENDS_ON_INPUT:
       "The rejected extraction was not executed. On your next call, select a different reusable source, or navigate back to the page containing the requested facts. For account details, click the stable Customer Search navigation link, repeat the bound search and extract account number and ledger/current balance from separate overview table cells with bound row_match. Do not invent record URLs. Do not retry the rejected summary control. Preserve transaction facts separately. An unchanged retry will stop this run.",
     UNBOUND_INPUT_ARGUMENT:
