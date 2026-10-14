@@ -1,9 +1,23 @@
-import type { BrowserContext, Page } from "playwright";
+import type { BrowserContext, Frame, Page } from "playwright";
 import {
   sameHostname,
   type AccessPolicy,
   type PolicyViolation,
 } from "../../runtime/action-policy.js";
+
+/** Inline child documents inherit their parent's navigation scope. Their about:
+ * URL has no hostname; walk nested inline parents back to an allowed document.
+ * Top-level about: URLs and other networkless schemes remain outside policy.
+ */
+function isAllowedInlineChild(frame: Frame, hostname: string): boolean {
+  const parent = frame.parentFrame();
+  if (!parent || !/^about:(blank|srcdoc)(?:[?#].*)?$/.test(frame.url()))
+    return false;
+  return (
+    sameHostname(parent.url(), hostname) ||
+    isAllowedInlineChild(parent, hostname)
+  );
+}
 /** CDP pauses every document request, including every redirect hop. Context
  * routing covers a popup's initial request before its Page event is delivered.
  * Assets are deliberately not host-filtered. Service workers are disabled by the
@@ -70,9 +84,9 @@ export async function installNavigationPolicy(
     ],
   });
   page.on("framenavigated", (frame) => {
-    // Networkless navigations cannot make off-host HTTP requests, but must still
-    // terminate the run (data:, blob:, about:, etc.).
-    if (frame !== page.mainFrame() && frame.url() === "about:blank") return;
+    // srcdoc/blank child frames are local to an allowed ancestor. Their later
+    // HTTP navigations still pass through document/redirect interception above.
+    if (isAllowedInlineChild(frame, hostname)) return;
     if (reject(frame.url())) void page.close().catch(() => {});
   });
 }
