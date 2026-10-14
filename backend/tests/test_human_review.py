@@ -13,7 +13,14 @@ def evidence(repo, row, body):
         "human_review_snapshot",
         {
             k: body.get(k)
-            for k in ("call_id", "tool", "arguments", "assessment", "state_fingerprint")
+            for k in (
+                "call_id",
+                "tool",
+                "arguments",
+                "assessment",
+                "state_fingerprint",
+                "target_resolution",
+            )
         },
         assets=[
             {
@@ -68,6 +75,228 @@ def test_review_pause_decision_and_duplicate_delivery(repo):
     with pytest.raises(ApiError):
         service.decide(review["review_id"], "rejected", None)
     assert repo.get("runs", "run_id", row["run_id"])["status"] == "running"
+
+
+def target_review(repo, access_policy="READ_ONLY", candidates=None):
+    from interface_api.repositories import identifier
+    from interface_api.reviews import Reviews
+
+    row = run(repo, access_policy=access_policy)
+    repo.transition(row["run_id"], "running")
+    body = {
+        "review_id": identifier(),
+        "call_id": "target-call",
+        "tool": "click",
+        "arguments": {"target": {"kind": "control", "text": "Open"}},
+        "assessment": None,
+        "state_fingerprint": "e" * 64,
+        "target_resolution": {
+            "reason": "ambiguous" if candidates is None else "not_found",
+            "candidates": candidates
+            if candidates is not None
+            else [
+                {
+                    "id": "left",
+                    "label": "Open left",
+                    "bounds": {
+                        "x": 0,
+                        "y": 1,
+                        "width": 50,
+                        "height": 20,
+                    },
+                },
+                {
+                    "id": "right",
+                    "label": "Open right",
+                    "bounds": {
+                        "x": 1230,
+                        "y": 780,
+                        "width": 50,
+                        "height": 20,
+                    },
+                },
+            ],
+        },
+    }
+    body["event_sequence"] = evidence(repo, row, body)
+    return row, body, Reviews(repo)
+
+
+def test_target_choice_is_persisted_and_delivered_without_risk_approval(repo):
+    row, body, service = target_review(repo)
+    review = service.create(row["run_id"], body)
+    assert review["access_policy"] == "READ_ONLY"
+    assert review["target_resolution"] == body["target_resolution"]
+    result = service.decide(review["review_id"], "approved", "Left", "left")
+    assert result["selected_candidate_id"] == "left"
+    assert result["refresh_targets"] is False
+    assert result["run_status"] == "running"
+    assert service.get(review["review_id"])["selected_candidate_id"] == "left"
+    assert service.decide(review["review_id"], "approved", "Left", "left") == result
+    with pytest.raises(ApiError) as exc:
+        service.decide(review["review_id"], "approved", "Left", "right")
+    assert exc.value.status == 409
+    event = repo.rows(
+        "run_events",
+        "run_id=? AND type='human_review_decided'",
+        (row["run_id"],),
+        order="",
+    )[0]["payload"]
+    assert event["selected_candidate_id"] == "left"
+    assert event["refresh_targets"] is False
+    assert event["target_resolution"] == body["target_resolution"]
+
+
+def test_refresh_empty_targets_resumes_for_a_new_review(repo):
+    row, body, service = target_review(repo, candidates=[])
+    review = service.create(row["run_id"], body)
+    result = service.decide(review["review_id"], "approved", refresh_targets=True)
+    assert result["refresh_targets"] is True
+    assert result["selected_candidate_id"] is None
+    assert result["run_status"] == "running"
+    assert (
+        service.decide(review["review_id"], "approved", refresh_targets=True) == result
+    )
+    from interface_api.repositories import identifier
+
+    body["review_id"] = identifier()
+    body["event_sequence"] = evidence(repo, row, body)
+    assert service.create(row["run_id"], body)["status"] == "pending"
+
+
+@pytest.mark.parametrize(
+    "decision,selected,refresh",
+    [
+        ("approved", None, False),
+        ("approved", "unknown", False),
+        ("approved", "left", True),
+        ("rejected", "left", False),
+        ("rejected", None, True),
+        ("approved", "", False),
+        ("approved", "left", "true"),
+    ],
+)
+def test_invalid_target_decisions_do_not_resume(repo, decision, selected, refresh):
+    row, body, service = target_review(repo)
+    review = service.create(row["run_id"], body)
+    with pytest.raises(ApiError) as exc:
+        service.decide(
+            review["review_id"],
+            decision,
+            selected_candidate_id=selected,
+            refresh_targets=refresh,
+        )
+    assert exc.value.status == 422
+    assert service.get(review["review_id"])["status"] == "pending"
+    assert repo.get("runs", "run_id", row["run_id"])["status"] == "awaiting_human"
+
+
+@pytest.mark.parametrize("selected,refresh", [("left", False), (None, True)])
+def test_ordinary_review_forbids_target_decisions(repo, selected, refresh):
+    row, body, service = target_review(repo, access_policy="READ_WRITE")
+    body.pop("target_resolution")
+    body["event_sequence"] = evidence(repo, row, body)
+    review = service.create(row["run_id"], body)
+    with pytest.raises(ApiError) as exc:
+        service.decide(
+            review["review_id"],
+            "approved",
+            selected_candidate_id=selected,
+            refresh_targets=refresh,
+        )
+    assert exc.value.status == 422
+
+
+@pytest.mark.parametrize(
+    "bounds",
+    [
+        {"x": -1, "y": 0, "width": 10, "height": 10},
+        {"x": 0, "y": 0, "width": 0, "height": 10},
+        {"x": 0, "y": 0, "width": 10, "height": -1},
+        {"x": float("inf"), "y": 0, "width": 10, "height": 10},
+        {"x": 1280, "y": 0, "width": 10, "height": 10},
+        {"x": 0, "y": 791, "width": 10, "height": 10},
+    ],
+)
+def test_target_review_validates_bounds_for_direct_service_calls(repo, bounds):
+    row, body, service = target_review(repo, access_policy="READ_WRITE")
+    body["target_resolution"]["candidates"][0]["bounds"] = bounds
+    # Match the stored snapshot so bounds validation cannot be replaced by
+    # merely checking that the request equals the event.
+    if bounds["x"] != float("inf"):
+        body["event_sequence"] = evidence(repo, row, body)
+    with pytest.raises(ApiError) as exc:
+        service.create(row["run_id"], body)
+    assert exc.value.status == 422
+    assert repo.get("runs", "run_id", row["run_id"])["status"] == "running"
+
+
+def test_target_review_evidence_includes_candidate_context(repo):
+    row, body, service = target_review(repo, access_policy="READ_WRITE")
+    body["target_resolution"]["candidates"][0]["label"] = "Different target"
+    with pytest.raises(ApiError) as exc:
+        service.create(row["run_id"], body)
+    assert exc.value.code == "REVIEW_EVIDENCE_MISMATCH"
+
+
+def test_target_review_late_choice_is_conflict(repo):
+    row, body, service = target_review(repo)
+    review = service.create(row["run_id"], body)
+    repo.transition(row["run_id"], "cancelling")
+    with pytest.raises(ApiError) as exc:
+        service.decide(review["review_id"], "approved", selected_candidate_id="left")
+    assert exc.value.status == 409
+
+
+@pytest.mark.parametrize("invalid", ["reason", "duplicate", "empty_id", "bounds_type"])
+def test_invalid_target_context_is_rejected_for_direct_calls(repo, invalid):
+    row, body, service = target_review(repo, access_policy="READ_WRITE")
+    resolution = body["target_resolution"]
+    if invalid == "reason":
+        resolution["reason"] = "missing"
+    elif invalid == "duplicate":
+        resolution["candidates"][1]["id"] = "left"
+    elif invalid == "empty_id":
+        resolution["candidates"][0]["id"] = ""
+    else:
+        resolution["candidates"][0]["bounds"]["x"] = True
+    with pytest.raises(ApiError) as exc:
+        service.create(row["run_id"], body)
+    assert exc.value.status == 422
+
+
+@pytest.mark.parametrize("refresh", [False, True])
+def test_target_decision_http_persists_and_returns_runtime_fields(
+    repo, tmp_path, refresh
+):
+    from fastapi.testclient import TestClient
+
+    from interface_api.config import Settings
+    from interface_api.main import create_app
+
+    app = create_app(Settings(repo_root=tmp_path, _env_file=None))
+    app.state.repo = repo
+    client = TestClient(app)
+    row, body, _ = target_review(repo)
+    result = client.post(f"/v1/runs/{row['run_id']}/human-reviews", json=body)
+    assert result.status_code == 201
+    review = result.json()
+    assert review["target_resolution"]["candidates"][0]["id"] == "left"
+    payload = {"decision": "approved"}
+    if refresh:
+        payload["refresh_targets"] = True
+    else:
+        payload["selected_candidate_id"] = "right"
+    result = client.post(
+        f"/v1/human-reviews/{review['review_id']}/decision", json=payload
+    )
+    assert result.status_code == 200
+    poll = client.get(f"/v1/human-reviews/{review['review_id']}").json()
+    assert poll["status"] == "approved"
+    assert poll["selected_candidate_id"] == (None if refresh else "right")
+    assert poll["refresh_targets"] is refresh
+    assert poll["access_policy"] == "READ_ONLY"
+    assert poll["run_status"] == "running"
 
 
 def test_read_only_cannot_enter_review(repo):

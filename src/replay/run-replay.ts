@@ -1,3 +1,4 @@
+import { SafeError } from "../contracts/errors.js";
 import type { ReviewHandler } from "../runtime/human-review.js";
 import { entryAssessment } from "../contracts/execution.js";
 import { randomUUID, createHash } from "node:crypto";
@@ -18,6 +19,7 @@ import { parseToolAction } from "../contracts/tools.js";
 import type { Capture, ImageContent } from "../contracts/observation.js";
 import { resolveBindings } from "./bindings.js";
 import { resolveTarget, type BindingContext } from "./targets.js";
+import { resolveStepTargets } from "./target-review.js";
 import { evaluateCheck } from "./checks.js";
 export type ReplayAudit = (
   type: string,
@@ -133,10 +135,15 @@ export async function runReplay(
       busy: false,
       halted: false,
     };
-    const execute = async (tool: string, args: any, id: string | null) => {
+    const execute = async (
+      tool: string,
+      args: any,
+      id: string | null,
+      callId = randomUUID(),
+    ) => {
       options.signal?.throwIfAborted();
       const call = {
-        id: randomUUID(),
+        id: callId,
         name: tool,
         argumentsJson: JSON.stringify(args),
       };
@@ -244,6 +251,7 @@ export async function runReplay(
       throw Error("ENTRY_CHECK_FAILED");
     stage = "execution";
     const step = async (s: any): Promise<void> => {
+      const callId = randomUUID();
       stepId = s.step_id;
       dispatchState = "not_dispatched";
       options.signal?.throwIfAborted();
@@ -301,30 +309,57 @@ export async function runReplay(
         : await fresh();
       if (capture.observation.status !== "ok") throw Error("CAPTURE_FAILED");
       const resolve = async (
-        saved: any,
-        rowMatch?: Record<string, unknown>,
+        specs: { target: any; rowMatch?: Record<string, unknown> }[],
+        argumentsForReview: Record<string, unknown>,
       ) => {
-        const r = resolveTarget(saved, capture, assets, c, rowMatch);
-        await audit(
-          "target_resolution_finished",
-          r.diagnosis,
-          capture.image,
-          s.step_id,
-        );
-        if (!r.target) throw Error(String(r.diagnosis.reason));
-        return r.target;
+        const prepared = await resolveStepTargets({
+          call_id: callId,
+          specs,
+          capture,
+          fresh,
+          adapter: adapter!,
+          assets,
+          bindings: c,
+          tool: s.tool,
+          arguments: argumentsForReview,
+          execution: s.execution,
+          review: options.review,
+          signal: options.signal,
+          audit: (diagnosis, shot) =>
+            audit(
+              "target_resolution_finished",
+              diagnosis,
+              shot.image,
+              s.step_id,
+            ),
+        });
+        capture = prepared.capture;
+        return prepared.targets;
       };
       let args: any;
       // Extraction targets are durable descriptions rather than raw tool refs.
       if (s.tool === "extract_data") {
-        args = { fields: [] };
-        for (const field of s.arguments.fields) {
-          const { target, row_match, ...fieldArguments } = field;
-          args.fields.push({
-            ...resolveBindings(fieldArguments, inputs, results, c.environment),
-            target: await resolve(target, row_match),
-          });
-        }
+        const targets = await resolve(
+          s.arguments.fields.map((field: any) => ({
+            target: field.target,
+            rowMatch: field.row_match,
+          })),
+          resolveBindings(s.arguments, inputs, results, c.environment),
+        );
+        args = {
+          fields: s.arguments.fields.map((field: any, index: number) => {
+            const { target, row_match, ...fieldArguments } = field;
+            return {
+              ...resolveBindings(
+                fieldArguments,
+                inputs,
+                results,
+                c.environment,
+              ),
+              target: targets[index],
+            };
+          }),
+        };
       } else {
         args = resolveBindings(s.arguments, inputs, results, c.environment);
         if (
@@ -363,8 +398,9 @@ export async function runReplay(
             await withRecovery(s.post_checks);
             return;
           }
-          if (!r.target) throw Error(String(r.diagnosis.reason));
-          args.target = r.target;
+          args.target =
+            r.target ??
+            (await resolve([{ target: s.target, rowMatch }], args))[0];
         }
         delete args.row_match;
       }
@@ -374,6 +410,7 @@ export async function runReplay(
         s.tool,
         { ...args, execution: s.execution },
         s.step_id,
+        callId,
       );
       results[s.step_id] = response.result;
       if (
@@ -451,7 +488,11 @@ export async function runReplay(
       );
     return await outcome(
       "hard_failure",
-      error instanceof Error ? error.message : "REPLAY_FAILED",
+      error instanceof SafeError
+        ? error.code
+        : error instanceof Error
+          ? error.message
+          : "REPLAY_FAILED",
       "Saved flow could not be verified",
     );
   } finally {

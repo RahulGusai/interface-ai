@@ -9,6 +9,8 @@ const reviewResponse = z.object({
   status: z.enum(["pending", "approved", "rejected", "expired", "cancelled"]),
   run_status: z.string(),
   expires_at: z.iso.datetime({ offset: true }),
+  selected_candidate_id: z.string().min(1).nullable().optional(),
+  refresh_targets: z.boolean().default(false),
 });
 export function createReviewHandler(options: {
   baseUrl: string;
@@ -47,6 +49,7 @@ export function createReviewHandler(options: {
         assessment: request.assessment ?? null,
         event_sequence: eventSequence,
         state_fingerprint: request.fingerprint,
+        target_resolution: request.target_resolution ?? null,
       });
       deadline = AbortSignal.timeout(options.timeoutMs);
       for (;;) {
@@ -95,8 +98,25 @@ export function createReviewHandler(options: {
           }
           if (!["running", "awaiting_human"].includes(r.data.run_status))
             return { review_id: reviewId, status: "cancelled" };
-          if (r.data.status !== "pending")
-            return { review_id: reviewId, status: r.data.status };
+          if (r.data.status !== "pending") {
+            if (r.data.status === "approved" && request.target_resolution) {
+              const selection = r.data.selected_candidate_id;
+              const offered = request.target_resolution.candidates.some(
+                (c) => c.id === selection,
+              );
+              if (r.data.refresh_targets ? selection != null : !offered)
+                throw new SafeError(
+                  "HUMAN_REVIEW_PROTOCOL_ERROR",
+                  "Target review must select an offered candidate or refresh",
+                );
+            }
+            return {
+              review_id: reviewId,
+              status: r.data.status,
+              selected_candidate_id: r.data.selected_candidate_id ?? null,
+              refresh_targets: r.data.refresh_targets,
+            };
+          }
         }
         const untilExpiry =
           expiresAt === undefined ? undefined : expiresAt - Date.now();

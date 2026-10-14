@@ -3,7 +3,7 @@
 from datetime import datetime, timedelta, timezone
 
 from .artifact_validation import canonical, digest
-from .dto import ExecutionAssessment
+from .dto import ExecutionAssessment, HumanReviewCreate, HumanReviewDecision
 from .errors import ApiError
 from .repositories import now
 
@@ -30,17 +30,32 @@ class Reviews:
 
     def _view(self, row, c):
         return {k: v for k, v in row.items() if k != "request_sha256"} | {
-            "run_status": self.repo.get("runs", "run_id", row["run_id"], c)["status"]
+            "run_status": self.repo.get("runs", "run_id", row["run_id"], c)["status"],
+            "refresh_targets": bool(row["refresh_targets"]),
         }
 
     def create(self, run_id, body):
         with self.repo.db.transaction() as c:
             self._expire(c)
             run = self.repo.get("runs", "run_id", run_id, c)
-            if run["access_policy"] != "READ_WRITE":
+            if run["access_policy"] != "READ_WRITE" and not body.get(
+                "target_resolution"
+            ):
                 raise ApiError(
-                    409, "REVIEW_NOT_ALLOWED", "Read-only runs cannot request review"
+                    409,
+                    "REVIEW_NOT_ALLOWED",
+                    "Read-only runs require target resolution",
                 )
+            try:
+                body = HumanReviewCreate.model_validate(body).model_dump(
+                    mode="json", exclude_unset=True
+                )
+            except ValueError as error:
+                raise ApiError(
+                    422, "REQUEST_INVALID", "Invalid review request"
+                ) from error
+            if body.get("target_resolution") is None:
+                body.pop("target_resolution", None)
             request_hash = digest(body)
             old = self.repo.rows(
                 "human_review", "review_id=?", (body["review_id"],), conn=c
@@ -79,6 +94,7 @@ class Reviews:
                     "arguments",
                     "assessment",
                     "state_fingerprint",
+                    "target_resolution",
                 )
             ):
                 raise ApiError(
@@ -99,6 +115,24 @@ class Reviews:
                     "REVIEW_EVIDENCE_MISSING",
                     "Review requires a persisted screenshot",
                 )
+            resolution = body.get("target_resolution")
+            if resolution is not None:
+                width, height = assets[0]["width"], assets[0]["height"]
+                if (
+                    width is None
+                    or height is None
+                    or any(
+                        candidate["bounds"]["x"] + candidate["bounds"]["width"] > width
+                        or candidate["bounds"]["y"] + candidate["bounds"]["height"]
+                        > height
+                        for candidate in resolution["candidates"]
+                    )
+                ):
+                    raise ApiError(
+                        422,
+                        "INVALID_TARGET_BOUNDS",
+                        "Candidates must fit the persisted screenshot",
+                    )
             try:
                 assessment = ExecutionAssessment.model_validate(
                     body.get("assessment")
@@ -131,6 +165,11 @@ class Reviews:
                 .replace("+00:00", "Z"),
                 "decided_at": None,
                 "human_comment": None,
+                "target_resolution_json": canonical(resolution)
+                if resolution is not None
+                else None,
+                "selected_candidate_id": None,
+                "refresh_targets": False,
             }
             self.repo.insert(c, "human_review", data)
             self.repo.transition(run_id, "awaiting_human", conn=c)
@@ -166,17 +205,38 @@ class Reviews:
                 )
             ]
 
-    def decide(self, review_id, decision, comment=None):
+    def decide(
+        self,
+        review_id,
+        decision,
+        comment=None,
+        selected_candidate_id=None,
+        refresh_targets=False,
+    ):
         # Expiry commits separately even when a late decision is rejected.
         self.get(review_id)
         with self.repo.db.transaction() as c:
             row = self.repo.get("human_review", "review_id", review_id, c)
             run = self.repo.get("runs", "run_id", row["run_id"], c)
-            if decision not in ("approved", "rejected"):
-                raise ApiError(
-                    422, "INVALID_REVIEW_DECISION", "Expected approved or rejected"
+            try:
+                HumanReviewDecision.model_validate(
+                    {
+                        "decision": decision,
+                        "comment": comment,
+                        "selected_candidate_id": selected_candidate_id,
+                        "refresh_targets": refresh_targets,
+                    }
                 )
-            if row["status"] == decision and row["human_comment"] == comment:
+            except ValueError as error:
+                raise ApiError(
+                    422, "INVALID_REVIEW_DECISION", "Invalid review decision"
+                ) from error
+            if (
+                row["status"] == decision
+                and row["human_comment"] == comment
+                and row["selected_candidate_id"] == selected_candidate_id
+                and bool(row["refresh_targets"]) == refresh_targets
+            ):
                 return self._view(row, c)
             if (
                 row["status"] != "pending"
@@ -184,9 +244,39 @@ class Reviews:
                 or row["expires_at"] <= now()
             ):
                 raise ApiError(409, "REVIEW_CONCLUDED", "Review is no longer pending")
+            resolution = row["target_resolution"]
+            if resolution is None and (
+                selected_candidate_id is not None or refresh_targets
+            ):
+                raise ApiError(
+                    422,
+                    "INVALID_REVIEW_DECISION",
+                    "Approval review cannot select targets",
+                )
+            if resolution is not None and decision == "approved":
+                if selected_candidate_id is None and not refresh_targets:
+                    raise ApiError(
+                        422,
+                        "INVALID_REVIEW_DECISION",
+                        "Select a candidate or refresh targets",
+                    )
+                if selected_candidate_id is not None and selected_candidate_id not in {
+                    candidate["id"] for candidate in resolution["candidates"]
+                }:
+                    raise ApiError(
+                        422, "INVALID_REVIEW_DECISION", "Unknown target candidate"
+                    )
             c.execute(
-                "UPDATE human_review SET status=?,decided_at=?,human_comment=? WHERE review_id=?",
-                (decision, now(), comment, review_id),
+                "UPDATE human_review SET status=?,decided_at=?,human_comment=?,"
+                "selected_candidate_id=?,refresh_targets=? WHERE review_id=?",
+                (
+                    decision,
+                    now(),
+                    comment,
+                    selected_candidate_id,
+                    refresh_targets,
+                    review_id,
+                ),
             )
             self.repo.event(
                 row["run_id"],
@@ -195,6 +285,9 @@ class Reviews:
                     "review_id": review_id,
                     "decision": decision,
                     "human_comment": comment,
+                    "target_resolution": resolution,
+                    "selected_candidate_id": selected_candidate_id,
+                    "refresh_targets": refresh_targets,
                 },
                 conn=c,
             )

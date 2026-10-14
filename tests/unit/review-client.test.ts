@@ -195,3 +195,80 @@ it("reads a decision committed before expiry even when polling reaches the deadl
   expect((await handler(request)).status).toBe("approved");
   expect(reads).toBe(1);
 });
+it.each([
+  { selected_candidate_id: "second", refresh_targets: false },
+  { selected_candidate_id: null, refresh_targets: true },
+])(
+  "persists target choices and returns the selected candidate or refresh: %j",
+  async (decision) => {
+    let body: any;
+    const target_resolution = {
+      reason: "ambiguous" as const,
+      candidates: [
+        {
+          id: "second",
+          label: "Save below contact form",
+          bounds: { x: 20, y: 100, width: 80, height: 30 },
+        },
+      ],
+    };
+    const handler = createReviewHandler({
+      baseUrl: "http://localhost",
+      runId: "run",
+      timeoutMs: 1000,
+      persistSnapshot: async () => 4,
+      fetcher: async (_url, init) => {
+        body = JSON.parse(String(init?.body));
+        return Response.json({
+          review_id: body.review_id,
+          run_id: "run",
+          status: "approved",
+          run_status: "running",
+          expires_at: new Date(Date.now() + 1000).toISOString(),
+          ...decision,
+        });
+      },
+    });
+    expect(await handler({ ...request, target_resolution })).toMatchObject(
+      decision,
+    );
+    expect(body.target_resolution).toEqual(target_resolution);
+  },
+);
+it.each([
+  {},
+  { selected_candidate_id: "unknown" },
+  { selected_candidate_id: "second", refresh_targets: true },
+  { refresh_targets: "true" },
+])("rejects invalid target-resolution approvals: %j", async (decision) => {
+  const handler = createReviewHandler({
+    baseUrl: "http://localhost",
+    runId: "run",
+    timeoutMs: 1000,
+    persistSnapshot: async () => 4,
+    fetcher: async (_url, init) =>
+      Response.json({
+        review_id: JSON.parse(String(init?.body)).review_id,
+        run_id: "run",
+        status: "approved",
+        run_status: "running",
+        expires_at: new Date(Date.now() + 1000).toISOString(),
+        ...decision,
+      }),
+  });
+  await expect(
+    handler({
+      ...request,
+      target_resolution: {
+        reason: "ambiguous",
+        candidates: [
+          {
+            id: "second",
+            label: "Save",
+            bounds: { x: 0, y: 0, width: 80, height: 30 },
+          },
+        ],
+      },
+    }),
+  ).rejects.toMatchObject({ code: "HUMAN_REVIEW_PROTOCOL_ERROR" });
+});

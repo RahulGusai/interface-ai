@@ -37,7 +37,7 @@ def restore(db: Database, source: Path):
             if (
                 candidate.execute("PRAGMA integrity_check").fetchone()[0] != "ok"
                 or candidate.execute("PRAGMA user_version").fetchone()[0]
-                not in (1, 2, 3, 4)
+                not in (1, 2, 3, 4, 5)
                 or candidate.execute("PRAGMA foreign_key_check").fetchall()
             ):
                 raise ValueError("Invalid backup")

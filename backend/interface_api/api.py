@@ -512,5 +512,10 @@ async def decide_review(request: Request, ident: UUID, body: HumanReviewDecision
     from .reviews import Reviews
 
     return await threaded(
-        Reviews(repo(request)).decide, str(ident), body.decision, body.comment
+        Reviews(repo(request)).decide,
+        str(ident),
+        body.decision,
+        body.comment,
+        body.selected_candidate_id,
+        body.refresh_targets,
     )

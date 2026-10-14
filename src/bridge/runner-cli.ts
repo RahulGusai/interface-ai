@@ -82,6 +82,7 @@ async function execute(c: ReturnType<typeof startSchema.parse>) {
               arguments: request.arguments,
               assessment: request.assessment ?? null,
               state_fingerprint: request.fingerprint,
+              target_resolution: request.target_resolution ?? null,
             },
             request.capture.image,
           )) as { event_sequence: number };

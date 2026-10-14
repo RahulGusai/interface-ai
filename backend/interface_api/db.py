@@ -39,7 +39,7 @@ class Database:
             fcntl.flock(lock, fcntl.LOCK_EX)
             with self.connect() as conn:
                 version = conn.execute("PRAGMA user_version").fetchone()[0]
-                if version > 4:
+                if version > 5:
                     raise ValueError("Database schema is newer than this application")
                 conn.execute("PRAGMA journal_mode=WAL")
             with self._lock, self.connect() as conn:
@@ -54,6 +54,7 @@ class Database:
                         "0002_nullable_json.sql",
                         "0003_access_policy.sql",
                         "0004_human_review.sql",
+                        "0005_target_resolution.sql",
                     )
                     for index in range(version, len(migrations)):
                         sql = (
@@ -79,4 +80,4 @@ class Database:
                     raise
                 finally:
                     conn.execute("PRAGMA foreign_keys=ON")
-        return 4
+        return 5

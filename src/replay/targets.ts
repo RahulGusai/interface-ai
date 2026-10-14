@@ -234,7 +234,11 @@ export function resolveTarget(
       diagnosis: {
         verdict: "failed",
         reason:
-          error instanceof Error ? error.message : "TARGET_RESOLUTION_FAILED",
+          error instanceof Error
+            ? error.message === "REFERENCE_UNINFORMATIVE"
+              ? "TARGET_NOT_FOUND"
+              : error.message
+            : "TARGET_RESOLUTION_FAILED",
         candidates,
         required_matches: 1,
         target,

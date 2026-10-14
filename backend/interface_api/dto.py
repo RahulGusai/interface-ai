@@ -295,6 +295,31 @@ class ExecutionAssessment(DTO):
 ReviewStatus = Literal["pending", "approved", "rejected", "expired", "cancelled"]
 
 
+class TargetCandidateBounds(DTO):
+    x: float = Field(ge=0, allow_inf_nan=False, strict=True)
+    y: float = Field(ge=0, allow_inf_nan=False, strict=True)
+    width: float = Field(gt=0, allow_inf_nan=False, strict=True)
+    height: float = Field(gt=0, allow_inf_nan=False, strict=True)
+
+
+class TargetCandidate(DTO):
+    id: str = Field(min_length=1)
+    label: str = Field(min_length=1)
+    bounds: TargetCandidateBounds
+
+
+class TargetResolution(DTO):
+    reason: Literal["ambiguous", "not_found"]
+    candidates: list[TargetCandidate]
+
+    @model_validator(mode="after")
+    def unique_candidates(self):
+        ids = [candidate.id for candidate in self.candidates]
+        if len(ids) != len(set(ids)):
+            raise ValueError("Candidate IDs must be unique")
+        return self
+
+
 class HumanReviewCreate(DTO):
     review_id: UUID
     call_id: str = Field(min_length=1, max_length=200)
@@ -303,11 +328,24 @@ class HumanReviewCreate(DTO):
     assessment: ExecutionAssessment | None = None
     event_sequence: int = Field(gt=0)
     state_fingerprint: str = Field(pattern=r"^[a-f0-9]{64}$")
+    target_resolution: TargetResolution | None = None
 
 
 class HumanReviewDecision(DTO):
     decision: Literal["approved", "rejected"]
     comment: str | None = Field(None, max_length=2000)
+    selected_candidate_id: str | None = Field(None, min_length=1)
+    refresh_targets: bool = Field(False, strict=True)
+
+    @model_validator(mode="after")
+    def consistent_target_choice(self):
+        if self.selected_candidate_id is not None and self.refresh_targets:
+            raise ValueError("Choose one candidate or refresh targets")
+        if self.decision == "rejected" and (
+            self.selected_candidate_id is not None or self.refresh_targets
+        ):
+            raise ValueError("Rejection cannot select or refresh targets")
+        return self
 
 
 class HumanReviewDTO(DTO):
@@ -319,7 +357,7 @@ class HumanReviewDTO(DTO):
     assessment_decision: Literal["auto_approve", "requires_human_review"] | None
     confidence: float | None
     reason: str
-    access_policy: Literal["READ_WRITE"]
+    access_policy: Literal["READ_ONLY", "READ_WRITE"]
     screenshot_asset_id: str
     event_sequence: int
     state_fingerprint: str
@@ -329,3 +367,6 @@ class HumanReviewDTO(DTO):
     expires_at: str
     decided_at: str | None
     human_comment: str | None
+    target_resolution: TargetResolution | None = None
+    selected_candidate_id: str | None = None
+    refresh_targets: bool = False

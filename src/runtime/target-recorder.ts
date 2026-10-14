@@ -5,8 +5,6 @@ import type { Capture, Target } from "../contracts/observation.js";
 import type { DurableTarget } from "../contracts/artifact.js";
 import { rowMatchesValues } from "./row-selection.js";
 import { SafeError } from "../contracts/errors.js";
-import { semanticMatches } from "../replay/targets.js";
-import { matchTemplate } from "../replay/template-matcher.js";
 export const recordingHint = z.strictObject({
   visual_reference: z.strictObject({
     rect: z.strictObject({
@@ -270,16 +268,6 @@ export function recordDurableTarget(
       scope,
       required_matches: 1,
     };
-    const candidates = semanticMatches(durable, capture, {
-      inputs: variableInputs ?? {},
-      results: {},
-      environment: { base_url: observation.surface.url ?? "" },
-    });
-    if (candidates.length !== 1 || candidates[0]?.ref !== control.ref)
-      throw new SafeError(
-        "AMBIGUOUS_DURABLE_TARGET",
-        "AMBIGUOUS_DURABLE_TARGET: the selected control's name, role and scope do not uniquely identify it for replay. The action was not executed. Choose a uniquely labeled control, or use a screenshot point target with recording_hint.visual_reference containing distinctive surrounding context, not just the repeated button.",
-      );
     return { target: durable };
   }
   if (!hint) throw Error("REFERENCE_BOUNDS_REQUIRED");
@@ -307,22 +295,6 @@ export function recordDurableTarget(
   const crop = new PNG({ width: r.width, height: r.height });
   PNG.bitblt(png, crop, r.left, r.top, r.width, r.height, 0, 0);
   const bytes = PNG.sync.write(crop);
-  let matches;
-  try {
-    matches = matchTemplate(Buffer.from(capture.image.bytes), bytes, 0.95);
-  } catch (error) {
-    if (error instanceof Error && error.message === "REFERENCE_UNINFORMATIVE")
-      throw new SafeError(
-        "REFERENCE_UNINFORMATIVE",
-        "The action was not executed. Include distinctive visible context in recording_hint.visual_reference; a flat screenshot crop cannot identify the target for replay.",
-      );
-    throw error;
-  }
-  if (matches.length !== 1)
-    throw new SafeError(
-      "AMBIGUOUS_DURABLE_TARGET",
-      "AMBIGUOUS_DURABLE_TARGET: this screenshot reference matches multiple locations. The action was not executed. Include distinctive surrounding context in recording_hint.visual_reference so the selected target has exactly one match.",
-    );
   const sha = createHash("sha256").update(bytes).digest("hex");
   const context = {
     viewport_width: 1280,

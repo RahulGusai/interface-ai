@@ -2968,6 +2968,16 @@
             "type": "string",
             "pattern": "^[a-f0-9]{64}$",
             "title": "State Fingerprint"
+          },
+          "target_resolution": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TargetResolution"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "additionalProperties": false,
@@ -3037,7 +3047,10 @@
           },
           "access_policy": {
             "type": "string",
-            "const": "READ_WRITE",
+            "enum": [
+              "READ_ONLY",
+              "READ_WRITE"
+            ],
             "title": "Access Policy"
           },
           "screenshot_asset_id": {
@@ -3108,6 +3121,32 @@
               }
             ],
             "title": "Human Comment"
+          },
+          "target_resolution": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TargetResolution"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "selected_candidate_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Selected Candidate Id"
+          },
+          "refresh_targets": {
+            "type": "boolean",
+            "title": "Refresh Targets",
+            "default": false
           }
         },
         "additionalProperties": false,
@@ -3155,6 +3194,23 @@
               }
             ],
             "title": "Comment"
+          },
+          "selected_candidate_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Selected Candidate Id"
+          },
+          "refresh_targets": {
+            "type": "boolean",
+            "title": "Refresh Targets",
+            "default": false
           }
         },
         "additionalProperties": false,
@@ -3992,6 +4048,90 @@
           "mime_type"
         ],
         "title": "SignedAssetDTO"
+      },
+      "TargetCandidate": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Id"
+          },
+          "label": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Label"
+          },
+          "bounds": {
+            "$ref": "#/components/schemas/TargetCandidateBounds"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "label",
+          "bounds"
+        ],
+        "title": "TargetCandidate"
+      },
+      "TargetCandidateBounds": {
+        "properties": {
+          "x": {
+            "type": "number",
+            "minimum": 0.0,
+            "title": "X"
+          },
+          "y": {
+            "type": "number",
+            "minimum": 0.0,
+            "title": "Y"
+          },
+          "width": {
+            "type": "number",
+            "exclusiveMinimum": 0.0,
+            "title": "Width"
+          },
+          "height": {
+            "type": "number",
+            "exclusiveMinimum": 0.0,
+            "title": "Height"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "x",
+          "y",
+          "width",
+          "height"
+        ],
+        "title": "TargetCandidateBounds"
+      },
+      "TargetResolution": {
+        "properties": {
+          "reason": {
+            "type": "string",
+            "enum": [
+              "ambiguous",
+              "not_found"
+            ],
+            "title": "Reason"
+          },
+          "candidates": {
+            "items": {
+              "$ref": "#/components/schemas/TargetCandidate"
+            },
+            "type": "array",
+            "title": "Candidates"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "reason",
+          "candidates"
+        ],
+        "title": "TargetResolution"
       },
       "ValidateRequest": {
         "properties": {

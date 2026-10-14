@@ -86,8 +86,8 @@ function saveCapture(): Capture {
   };
 }
 
-it("rejects a selected Save whose durable semantic description matches both buttons", () => {
-  expect(() =>
+it("records the selected Save even when its durable description matches both buttons", () => {
+  expect(
     recordDurableTarget(
       { kind: "control", control_ref: "bottom" },
       saveCapture(),
@@ -95,7 +95,7 @@ it("rejects a selected Save whose durable semantic description matches both butt
       undefined,
       { customer_name: "Halima Achterberg" },
     ),
-  ).toThrow("AMBIGUOUS_DURABLE_TARGET");
+  ).toMatchObject({ target: { kind: "semantic", name: { value: "Save" } } });
 });
 
 it("keeps same-name controls when their recorded scopes distinguish them", () => {
@@ -112,7 +112,7 @@ it("keeps same-name controls when their recorded scopes distinguish them", () =>
   ).toMatchObject({ kind: "semantic", name: { value: "Save" } });
 });
 
-it("rejects a point reference when the same crop identifies two different controls", () => {
+it("records a geometrically valid point reference even when its crop is repeated", () => {
   const png = new PNG({ width: 1280, height: 800 });
   png.data.fill(255);
   for (const left of [40, 500])
@@ -137,7 +137,7 @@ it("rejects a point reference when the same crop identifies two different contro
     mimeType: "image/png",
     bytes: PNG.sync.write(png),
   };
-  expect(() =>
+  expect(
     recordDurableTarget({ kind: "point", x: 60, y: 70 }, capture, {
       visual_reference: {
         rect: { left: 40, top: 50, width: 40, height: 40 },
@@ -145,5 +145,5 @@ it("rejects a point reference when the same crop identifies two different contro
         description: "Save button",
       },
     }),
-  ).toThrow("AMBIGUOUS_DURABLE_TARGET");
+  ).toMatchObject({ target: { kind: "visual" } });
 });

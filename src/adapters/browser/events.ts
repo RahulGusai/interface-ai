@@ -5,6 +5,7 @@ export type EventState = {
   blocked?: { kind: string; message: string };
   dialogs: DialogEvent[];
   notify: () => void;
+  onBlock?: () => void;
   closed: boolean;
 };
 export function installEvents(
@@ -20,6 +21,8 @@ export function installEvents(
   page.on("close", () => {
     state.closed = true;
     state.generation++;
+    state.notify();
+    state.onBlock?.();
   });
   page.on("dialog", (dialog) => {
     void (async () => {
@@ -46,6 +49,7 @@ export function installEvents(
           message: "Dialog could not be resolved",
         };
         state.notify();
+        state.onBlock?.();
       }
     })();
   });
@@ -56,6 +60,7 @@ export function installEvents(
       message: "Additional pages are unsupported",
     };
     state.notify();
+    state.onBlock?.();
     void popup.close().catch(() => {});
   });
 }

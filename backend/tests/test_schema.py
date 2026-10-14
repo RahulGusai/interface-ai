@@ -10,7 +10,7 @@ def test_database_is_transactional_and_nine_tables(tmp_path):
     db = Database(tmp_path / "data" / "test.sqlite3")
     db.migrate()
     with db.connect() as c:
-        assert c.execute("PRAGMA user_version").fetchone()[0] == 4
+        assert c.execute("PRAGMA user_version").fetchone()[0] == 5
         assert c.execute("PRAGMA foreign_keys").fetchone()[0] == 1
         names = {
             r[0] for r in c.execute("SELECT name FROM sqlite_master WHERE type='table'")
@@ -119,7 +119,7 @@ def test_upgrade_preserves_published_runs_bindings_and_guards(tmp_path, monkeypa
         assert {
             name: list(c.execute(f"SELECT * FROM {name}")) for name in tables
         } == before
-    assert db.migrate() == 4
+    assert db.migrate() == 5
     db.migrate()
     with db.connect() as c:
         assert {
@@ -148,3 +148,81 @@ def test_upgrade_preserves_published_runs_bindings_and_guards(tmp_path, monkeypa
             c.execute("UPDATE artifacts SET state='draft'")
         with pytest.raises(sqlite3.IntegrityError, match="CHECK constraint"):
             c.execute("UPDATE runs SET result_json='invalid JSON'")
+
+
+@pytest.mark.parametrize("status", ["pending", "approved"])
+def test_v4_upgrade_preserves_legacy_human_reviews(tmp_path, status):
+    from conftest import run
+    from test_human_review import evidence
+
+    from interface_api.artifact_validation import digest
+    from interface_api.db import Database
+    from interface_api.repositories import Repository, identifier
+    from interface_api.reviews import Reviews
+
+    db = Database(tmp_path / "legacy-review.sqlite3")
+    migrations = Path(__file__).parents[1] / "interface_api/migrations"
+    with db.connect() as c:
+        for name in (
+            "0001_initial.sql",
+            "0002_nullable_json.sql",
+            "0003_access_policy.sql",
+            "0004_human_review.sql",
+        ):
+            c.executescript((migrations / name).read_text())
+        c.execute("PRAGMA user_version=4")
+    repo = Repository(db)
+    row = run(repo, access_policy="READ_WRITE")
+    repo.transition(row["run_id"], "running")
+    review_id = identifier()
+    body = {
+        "review_id": review_id,
+        "call_id": "old-call",
+        "tool": "click",
+        "arguments": {},
+        "assessment": None,
+        "state_fingerprint": "f" * 64,
+    }
+    sequence = evidence(repo, row, body)
+    body["event_sequence"] = sequence
+    with db.transaction() as c:
+        c.execute(
+            "INSERT INTO human_review VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            (
+                review_id,
+                row["run_id"],
+                "old-call",
+                "click",
+                "{}",
+                None,
+                None,
+                "legacy reason",
+                "READ_WRITE",
+                repo.rows("evidence_assets", order="")[0]["asset_id"],
+                sequence,
+                "f" * 64,
+                digest(body),
+                status,
+                "2026-10-14T00:00:00Z",
+                "2099-10-14T00:00:00Z",
+                None if status == "pending" else "decided",
+                "old comment",
+            ),
+        )
+        before = dict(c.execute("SELECT * FROM human_review").fetchone())
+    assert db.migrate() == 5
+    with db.connect() as c:
+        after = dict(c.execute("SELECT * FROM human_review").fetchone())
+        assert {key: after[key] for key in before} == before
+        assert not c.execute("PRAGMA foreign_key_check").fetchall()
+    review = Reviews(repo).get(review_id)
+    assert review["target_resolution"] is None
+    assert review["selected_candidate_id"] is None
+    assert review["refresh_targets"] is False
+    assert review["status"] == status
+    # The new optional context's null default cannot invalidate an ordinary
+    # review's legacy creation retry.
+    assert (
+        Reviews(repo).create(row["run_id"], body | {"target_resolution": None})
+        == review
+    )

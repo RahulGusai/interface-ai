@@ -1,5 +1,6 @@
 import {
   accessDecision,
+  untilPolicyBreach,
   intrinsicClassification,
   sameHostname,
   violationResponse,
@@ -25,7 +26,11 @@ import {
   type BrowserAction,
   type ToolResponse,
 } from "../../contracts/tools.js";
-import type { Capture, Observation } from "../../contracts/observation.js";
+import type {
+  Capture,
+  Observation,
+  Target,
+} from "../../contracts/observation.js";
 import { collectControls } from "./capture.js";
 import {
   resolve,
@@ -61,6 +66,59 @@ export class BrowserAdapter implements BrowserAdapterPort {
   private readonly authorizedActions = new WeakSet<BrowserAction>();
   authorizeReadWrite(action: BrowserAction) {
     this.authorizedActions.add(action);
+  }
+  private readonly reviewController = new AbortController();
+  get reviewSignal() {
+    return this.reviewController.signal;
+  }
+  async targetBounds(target: Target) {
+    if (target.kind !== "control") return null;
+    const signal = AbortSignal.any([
+      this.policySignal,
+      this.reviewSignal,
+      AbortSignal.timeout(this.options.captureMs),
+    ]);
+    try {
+      return await untilPolicyBreach(signal, async () => {
+        if (
+          this.observedGeneration !== this.state.generation ||
+          (await layoutSignature(this.page)) !== this.signature
+        )
+          throw new SafeError(
+            "REVIEW_TARGET_STALE",
+            "Screenshot layout changed",
+          );
+        const binding = this.bindings.get(target.control_ref);
+        if (!binding || !(await binding.element.evaluate((e) => e.isConnected)))
+          throw new SafeError(
+            "REVIEW_TARGET_STALE",
+            "Observed control detached",
+          );
+        // Playwright boundingBox includes child-frame offsets in global viewport coordinates.
+        const bounds = await binding.element.boundingBox();
+        if (!bounds)
+          throw new SafeError(
+            "REVIEW_TARGET_STALE",
+            "Observed control is no longer visible",
+          );
+        if (
+          this.observedGeneration !== this.state.generation ||
+          (await layoutSignature(this.page)) !== this.signature
+        )
+          throw new SafeError(
+            "REVIEW_TARGET_STALE",
+            "Screenshot layout changed",
+          );
+        return bounds;
+      });
+    } catch (error) {
+      this.policySignal.throwIfAborted();
+      this.reviewSignal.throwIfAborted();
+      throw new SafeError(
+        "REVIEW_TARGET_STALE",
+        "Observed control geometry is unavailable",
+      );
+    }
   }
   async reviewSnapshot(action: ToolAction) {
     if (this.poisoned || this.state.closed || this.state.blocked)
@@ -166,6 +224,7 @@ export class BrowserAdapter implements BrowserAdapterPort {
     if (this.violation) return;
     this.violation = violation;
     this.policyController.abort(violation);
+    this.reviewController.abort(violation);
     this.state.blocked = { kind: "policy", message: violation.reason };
     this.state.notify();
     // Stop page scripts and pending input as soon as a breach is known.
@@ -192,7 +251,17 @@ export class BrowserAdapter implements BrowserAdapterPort {
     private readonly context: BrowserContext,
     private readonly page: Page,
     private readonly options: BrowserOptions,
-  ) {}
+  ) {
+    this.state.onBlock = () => {
+      if (this.state.blocked || this.state.closed)
+        this.reviewController.abort(
+          new SafeError(
+            "REVIEW_BROWSER_UNAVAILABLE",
+            "Browser cannot be reviewed",
+          ),
+        );
+    };
+  }
   static async create(options: Partial<BrowserOptions> = {}) {
     const config = { ...browserDefaults, ...options };
     const enforcePolicy = config.runPolicy?.accessPolicy === "READ_WRITE";
@@ -241,6 +310,7 @@ export class BrowserAdapter implements BrowserAdapterPort {
               message: "Additional pages are unsupported",
             };
             adapter.state.notify();
+            adapter.state.onBlock?.();
           },
         );
       return adapter;

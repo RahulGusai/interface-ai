@@ -38,7 +38,7 @@ function html(shift = 0, duplicate = false) {
     </script>`;
 }
 
-it("corrects duplicate Save recording and replays the intended button at a fresh position exactly once", async () => {
+it("records the second Save and replays it after choosing fresh targets exactly once", async () => {
   const fixture = await startFixture(undefined, html());
   const directory = await mkdtemp(join(tmpdir(), "duplicate-save-"));
   const discovery: DiscoveryContext = {
@@ -139,21 +139,6 @@ it("corrects duplicate Save recording and replays the intended button at a fresh
                 };
                 break;
               case 2:
-                name = "click";
-                args = {
-                  observation_id: o.observation_id,
-                  target: { kind: "point", x: 90, y: 366 },
-                  recording_hint: {
-                    visual_reference: {
-                      rect: { left: 40, top: 310, width: 100, height: 80 },
-                      relative_point: { u: 0.5, v: 0.7 },
-                      description:
-                        "Save with the unique Commit contact changes context",
-                    },
-                  },
-                };
-                break;
-              case 3:
                 name = "extract_data";
                 args = {
                   observation_id: o.observation_id,
@@ -220,31 +205,34 @@ it("corrects duplicate Save recording and replays the intended button at a fresh
       },
     );
     expect(result.status).toBe("goal_achieved");
-    expect(audits).toContainEqual(
-      expect.objectContaining({
-        type: "tool_finished",
-        call: expect.objectContaining({ id: "1" }),
-        result: expect.objectContaining({
-          status: "error",
-          code: "AMBIGUOUS_DURABLE_TARGET",
-        }),
-      }),
-    );
     expect(discovery.records.filter((r) => r.tool === "click")).toHaveLength(1);
     const definition = discovery.artifact!.definition;
-    expect(definition.steps[2]!.target!.kind).toBe("visual");
+    expect(definition.steps[2]!.target!.kind).toBe("semantic");
     const assets = discovery.references.map((r) => ({
       asset_id: r.asset_handle,
       staged_path: r.staged_path,
       sha256: r.sha256,
     }));
-    for (const duplicate of [false, true]) {
-      const fresh = await startFixture(undefined, html(200, duplicate));
+    for (const [duplicate, requiresRisk] of [
+      [false, false],
+      [true, false],
+      [false, true],
+    ]) {
+      const replayDefinition = structuredClone(definition);
+      if (requiresRisk)
+        replayDefinition.steps[2]!.execution = {
+          ...assessment,
+          decision: "requires_human_review",
+        };
+      const pinned = JSON.stringify(replayDefinition);
+      let targetReviews = 0,
+        riskReviews = 0;
+      const fresh = await startFixture(undefined, html(200, !!duplicate));
       try {
         const events: { type: string; step_id?: string | null }[] = [];
         const replay = await runReplay(
           {
-            artifact: { definition } as any,
+            artifact: { definition: replayDefinition } as any,
             inputs: { email: "replay@example.test" },
             deployment: { ...discovery.deployment, base_url: fresh.url },
             access_policy: "READ_WRITE",
@@ -253,32 +241,51 @@ it("corrects duplicate Save recording and replays the intended button at a fresh
           },
           { adapterFactory: createBrowserFactory({ headless: true }) },
           {
+            review: async (request: any) => {
+              if (!request.target_resolution) {
+                riskReviews++;
+                expect(request.assessment.decision).toBe(
+                  "requires_human_review",
+                );
+                return { review_id: "risk", status: "approved" };
+              }
+              targetReviews++;
+              expect(request.target_resolution.reason).toBe("ambiguous");
+              expect(request.target_resolution.candidates).toHaveLength(
+                duplicate ? 3 : 2,
+              );
+              return {
+                review_id: "review",
+                status: "approved",
+                selected_candidate_id:
+                  request.target_resolution.candidates[1].id,
+              };
+            },
             onAudit: async (type, _payload, _image, step_id) => {
               events.push({ type, step_id });
             },
           },
         );
-        if (duplicate) {
-          expect(replay).toMatchObject({
-            status: "hard_failure",
-            code: "TARGET_AMBIGUOUS",
-            step_id: "step_3",
-            dispatch_state: "not_dispatched",
-          });
-          expect(
-            events.some(
-              (e) => e.type === "tool_started" && e.step_id === "step_3",
-            ),
-          ).toBe(false);
-        } else {
-          expect(replay).toMatchObject({
-            status: "success",
-            outputs: {
-              stored_email: "replay@example.test",
-              save_result: "bottom:1",
-            },
-          });
-        }
+        expect(targetReviews).toBe(1);
+        expect(riskReviews).toBe(requiresRisk ? 1 : 0);
+        expect(JSON.stringify(replayDefinition)).toBe(pinned);
+        expect(replay).toMatchObject({
+          status: "success",
+          outputs: {
+            stored_email: "replay@example.test",
+            save_result: "bottom:1",
+          },
+        });
+        expect(
+          events.filter(
+            (e) => e.type === "tool_started" && e.step_id === "step_3",
+          ),
+        ).toHaveLength(1);
+        expect(
+          events.filter(
+            (e) => e.type === "tool_finished" && e.step_id === "step_3",
+          ),
+        ).toHaveLength(1);
       } finally {
         await fresh.close();
       }
