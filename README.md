@@ -58,6 +58,8 @@ POST it to `/v1/runs` with `Content-Type: application/json` and the key header. 
 
 The draft represents the exact recorded run; arguments are not automatically parameterized. Outputs matching a named extraction bind to that recorded field; other reported outputs are retained as literal JSON values. Separate explicit validation replays the draft before capability publication and creation of the pair's first ready binding. Subsequent artifact versions leave an existing binding unchanged. Point actions require explicit pre-action reference bounds so the target recorder can preserve a visual target.
 
+Discovery checks that a recorded semantic target or screenshot reference identifies exactly one target before executing the action. For repeated controls with the same name and scope, use a uniquely labeled control or a screenshot point reference with distinctive surrounding context. Replay resolves that reference from a fresh capture and stops if it becomes ambiguous. Existing immutable drafts must be rediscovered to replace an ambiguous recorded target.
+
 ## Replay and lifecycle
 
 After publication, use the exact artifact UUID:
